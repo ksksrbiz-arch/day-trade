@@ -1,0 +1,54 @@
+"""Canonical feature vector -- the single source of feature math for both
+training (dataset.py) and live scoring (infer.py). Identical code path => no
+train/serve skew.
+
+All features are derived purely from a price history (oldest -> newest) using
+the already-tested ta + quant engines, then normalized to roughly [-1, 1].
+"""
+from __future__ import annotations
+
+from .. import ta as _ta
+from .. import quant as _q
+
+FEATURES = [
+    "rsi", "macd", "pctb", "stoch", "ema_cross", "mom20",
+    "trend", "atr", "sharpe", "zsma", "persist",
+]
+
+
+def _clamp(x, lo=-1.0, hi=1.0):
+    try:
+        return max(lo, min(hi, float(x)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def feature_vector(closes: list[float]):
+    """Return (vector, names) or (None, FEATURES) if too little history."""
+    if not closes or len(closes) < 30:
+        return None, FEATURES
+    s = _ta.ta_signals(closes)
+    ns = _q.name_stats(closes)
+    if s is None:
+        return None, FEATURES
+    rsi = (s.rsi14 - 50) / 50 if s.rsi14 is not None else 0.0
+    macd = s.components.get("macd", 0.0)            # already normalized vote
+    pctb = (s.pctb - 0.5) * 2 if s.pctb is not None else 0.0
+    stoch = (s.stoch_k - 50) / 50 if s.stoch_k is not None else 0.0
+    ema_cross = s.components.get("ema_cross", 0.0)
+    mom20 = s.components.get("momentum", 0.0)
+    trend = (s.trend_strength * 2 - 1)             # 0..1 -> -1..1
+    atr = _clamp((s.atr_pct or 0.0) * 20)          # ~0..1 scaled
+    sharpe = _clamp((ns.sharpe_20 if ns else 0.0) / 6)
+    zsma = _clamp((ns.z_vs_sma20 if ns else 0.0) / 3)
+    persist = _clamp(ns.persistence if ns else 0.0)
+    vec = [_clamp(rsi), _clamp(macd), _clamp(pctb), _clamp(stoch),
+           _clamp(ema_cross), _clamp(mom20), _clamp(trend), atr,
+           sharpe, zsma, persist]
+    return vec, FEATURES
+
+
+if __name__ == "__main__":
+    up = [100 * (1.01 ** i) for i in range(80)]
+    v, names = feature_vector(up)
+    print(dict(zip(names, [round(x, 3) for x in v])))

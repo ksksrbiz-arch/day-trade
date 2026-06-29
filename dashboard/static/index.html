@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>1Commerce Trading Terminal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#080b10; --panel:#0f141c; --panel2:#131a24; --line:#1d2735;
+    --txt:#e6edf3; --muted:#8b97a7; --dim:#5b6675;
+    --green:#16c784; --red:#ea3943; --blue:#3b82f6; --amber:#f0b90b; --purple:#a06bff;
+    --green-bg:rgba(22,199,132,.12); --red-bg:rgba(234,57,67,.12);
+    --grad-top:rgba(59,130,246,.30); --grad-bot:rgba(59,130,246,0);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+  .pos{color:var(--green)} .neg{color:var(--red)} .mut{color:var(--muted)}
+  a{color:var(--blue);text-decoration:none}
+
+  /* top bar */
+  header{display:flex;align-items:center;gap:18px;height:50px;padding:0 16px;
+    background:linear-gradient(180deg,#0f141c,#0c1119);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:30}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 10px var(--green)}
+  .tape{display:flex;gap:18px;overflow:hidden;flex:1;mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+  .tape .ti{display:flex;gap:6px;align-items:baseline;white-space:nowrap;font-size:12px}
+  .tape .ti b{color:var(--muted);font-weight:600}
+  .acct{display:flex;align-items:center;gap:14px;white-space:nowrap}
+  .acct .eq{font-size:17px;font-weight:700}
+  .pill{padding:3px 9px;border-radius:6px;font-weight:700;font-size:12px}
+  .pill.up{background:var(--green-bg);color:var(--green)} .pill.down{background:var(--red-bg);color:var(--red)}
+  .status{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:11px}
+  .status .live{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  /* layout */
+  .wrap{padding:12px;display:flex;flex-direction:column;gap:12px;max-width:1900px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  .grid{display:grid;grid-template-columns:300px 1fr 320px;gap:12px;align-items:start}
+  .col{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .bottom{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:1400px){.kpis{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .card h3{margin:0;padding:10px 13px;font-size:12px;font-weight:600;letter-spacing:.4px;
+    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .card .body{padding:13px}
+  .card h3 .tools{display:flex;gap:4px}
+
+  /* kpi */
+  .kpi{display:flex;align-items:center;gap:12px;padding:14px}
+  .kpi .meta{min-width:0}
+  .kpi .lbl{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .kpi .val{font-size:22px;font-weight:700;margin-top:2px}
+  .kpi .sub{font-size:11px;margin-top:2px}
+  .gauge{flex-shrink:0}
+
+  /* pills/tabs */
+  .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:2px}
+  .seg button{background:none;border:none;color:var(--muted);padding:4px 9px;border-radius:5px;
+    cursor:pointer;font-size:11px;font-weight:600}
+  .seg button.on{background:var(--blue);color:#fff}
+  .tabs{display:flex;gap:14px}
+  .tabs button{background:none;border:none;color:var(--dim);font-weight:700;font-size:12px;
+    letter-spacing:.4px;cursor:pointer;padding:0 0 7px;border-bottom:2px solid transparent}
+  .tabs button.on{color:var(--txt);border-color:var(--blue)}
+
+  /* rows */
+  .row{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:9px 13px;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .row .sym{font-weight:700}
+  .row .meta{color:var(--dim);font-size:11px}
+  .tag{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;letter-spacing:.5px;text-transform:uppercase}
+  .tag.long{background:var(--green-bg);color:var(--green)} .tag.short{background:var(--red-bg);color:var(--red)}
+  .tag.buy{background:var(--green-bg);color:var(--green)} .tag.sell{background:var(--red-bg);color:var(--red)}
+  .tag.watch{background:rgba(240,185,11,.12);color:var(--amber)}
+  .tag.neutral{background:#1c2531;color:var(--muted)}
+  .scroll{max-height:330px;overflow:auto}
+  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:#1f2a38;border-radius:8px}
+
+  /* brain */
+  .trendgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+  .tcell{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:8px;text-align:center}
+  .tcell .k{font-size:10px;color:var(--muted)} .tcell .v{font-weight:700;font-size:14px;margin-top:2px}
+  .regimebar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .regimebadge{padding:6px 12px;border-radius:8px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;font-size:13px}
+  .bar{height:7px;border-radius:4px;background:#1c2531;overflow:hidden}
+  .bar>i{display:block;height:100%;border-radius:4px}
+
+  /* bots */
+  .botrow{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:1px solid var(--line);gap:8px}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer}
+  .btn:hover{border-color:var(--blue)}
+  .btn.green{background:var(--green-bg);color:var(--green);border-color:transparent}
+  .btn.red{background:var(--red-bg);color:var(--red);border-color:transparent}
+  .dotstat{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .dotstat.run{background:var(--green);box-shadow:0 0 7px var(--green)} .dotstat.stop{background:var(--dim)}
+
+  canvas{display:block;width:100%}
+  .empty{color:var(--dim);padding:18px 13px;text-align:center;font-size:12px}
+  .chartwrap{position:relative;height:300px;padding:8px 6px}
+  .px-head{display:flex;align-items:baseline;gap:12px;padding:10px 13px;border-bottom:1px solid var(--line)}
+  .px-head .p{font-size:22px;font-weight:700}
+  .symin{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:6px;
+    padding:5px 9px;width:90px;font-weight:700;text-transform:uppercase}
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--muted);padding:0 13px 10px}
+  .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .newsbar{position:sticky;top:50px;z-index:25;background:#0c1119;border-bottom:1px solid var(--line);
+    height:30px;display:flex;align-items:center;overflow:hidden;gap:0}
+  .newsbar .lbl{flex-shrink:0;padding:0 10px;height:100%;display:flex;align-items:center;
+    background:var(--red-bg);color:var(--red);font-weight:700;font-size:11px;letter-spacing:.5px}
+  .marquee{display:flex;white-space:nowrap;animation:scroll 60s linear infinite;gap:28px;padding-left:20px}
+  .marquee:hover{animation-play-state:paused}
+  .marquee span{font-size:12px;color:var(--muted)} .marquee b{color:var(--txt)}
+  @keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+  .sysstat{display:flex;gap:6px;align-items:center}
+  .schip{background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+    padding:3px 8px;font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .tabnav{position:sticky;top:80px;z-index:24;display:flex;gap:4px;padding:8px 14px;
+    background:rgba(8,11,16,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);overflow-x:auto}
+  .tabnav button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:.3px;cursor:pointer;white-space:nowrap}
+  .tabnav button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .tabnav button:hover{border-color:var(--blue)}
+
+  /* command palette */
+  .cmdk-ov{position:fixed;inset:0;background:rgba(2,5,10,.6);backdrop-filter:blur(3px);z-index:100;display:none;align-items:flex-start;justify-content:center}
+  .cmdk-ov.on{display:flex}
+  .cmdk{margin-top:11vh;width:580px;max-width:92vw;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden}
+  .cmdk input{width:100%;border:none;background:var(--panel2);color:var(--txt);padding:14px 16px;font-size:15px;outline:none;border-bottom:1px solid var(--line)}
+  .cmdk .results{max-height:344px;overflow:auto}
+  .cmdk .opt{display:flex;align-items:center;gap:11px;padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid rgba(255,255,255,.03)}
+  .cmdk .opt.sel{background:var(--blue);color:#fff}
+  .cmdk .opt .cat{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);width:58px;flex-shrink:0}
+  .cmdk .opt.sel .cat{color:#cfe0ff}
+  .cmdk .opt .k{margin-left:auto;font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
+  .cmdk .hint{padding:8px 16px;font-size:10px;color:var(--dim);display:flex;gap:14px;border-top:1px solid var(--line)}
+  .cmdk .hint b{color:var(--muted);font-weight:600}
+  .toasts{position:fixed;bottom:18px;right:18px;z-index:120;display:flex;flex-direction:column;gap:8px}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--txt);box-shadow:0 8px 24px rgba(0,0,0,.45);animation:tin .18s ease;max-width:330px}
+  .toast.ok{border-left-color:var(--green)} .toast.warn{border-left-color:var(--amber)} .toast.err{border-left-color:var(--red)}
+  .toast .tt{font-weight:700;margin-right:6px}
+  @keyframes tin{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+  .kx{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-family:monospace}
+  /* activity timeline */
+  .tlrow{display:flex;gap:11px;padding:8px 13px}
+  .tlrow .rail{flex-shrink:0;width:12px;display:flex;flex-direction:column;align-items:center}
+  .tlrow .dot{width:9px;height:9px;border-radius:50%;margin-top:4px}
+  .tlrow .line{flex:1;width:2px;background:var(--line);margin-top:3px;min-height:8px}
+  .tlrow:last-child .line{display:none}
+  .tlrow .b2{flex:1;min-width:0}
+  .tlrow .when{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .tlrow .txt{font-size:12.5px;margin-top:1px;line-height:1.35}
+  .tlrow .kchip{font-size:8.5px;text-transform:uppercase;letter-spacing:.4px;padding:1px 6px;border-radius:4px;background:#1c2531;color:var(--muted);margin-right:6px}
+  /* ---- neural tab helpers ---- */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .nbody{padding:12px 14px}
+  .barrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:11px}
+  .barrow .bn{width:74px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;font-size:10px}
+  .bartrk{flex:1;height:8px;background:var(--panel2);border-radius:5px;overflow:hidden}
+  .barfl{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width .5s}
+  .barval{width:42px;text-align:right;color:var(--txt);font-variant-numeric:tabular-nums}
+  .statline{display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 10px}
+  .statline .s b{display:block;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+  .statline .s span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  .chip2{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;
+    background:var(--panel2);border:1px solid var(--line)}
+  .chip2.on{background:var(--green-bg);color:var(--green);border-color:transparent}
+  .chip2.off{background:var(--red-bg);color:var(--red);border-color:transparent}
+  .relbar{display:flex;align-items:flex-end;gap:3px;height:60px;margin-top:6px}
+  .relbar .rb{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:1px}
+  .relbar .rb i{display:block;border-radius:2px 2px 0 0}
+  .meshnode{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
+  .meshnode .mn{width:80px;font-weight:700;text-transform:capitalize}
+  .tstruct{display:flex;gap:6px;margin-top:8px}
+  .tstruct .tc{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+  .tstruct .tc b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+  .tstruct .tc .h{font-size:9px;color:var(--muted);text-transform:uppercase}
+  .spark{display:block;width:100%;height:46px}
+  /* ---- visual polish pass ---- */
+  .card{transition:border-color .2s, box-shadow .2s}
+  .card:hover{border-color:#26344a;box-shadow:0 4px 22px rgba(0,0,0,.32)}
+  .card h3{position:relative}
+  .card h3::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:13px;border-radius:2px;background:linear-gradient(180deg,var(--blue),var(--purple));opacity:.85}
+  .card h3{padding-left:13px}
+  .statline .s b{background:linear-gradient(180deg,var(--txt),#aebfd2);-webkit-background-clip:text;background-clip:text}
+  .barfl{box-shadow:0 0 8px rgba(160,107,255,.35)}
+  @keyframes fadein{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  .nbody,.relbar,.tstruct{animation:fadein .35s ease}
+  #alertbadge{animation:pulse 2s infinite}
+  .chip2{transition:transform .15s} .chip2:hover{transform:translateY(-1px)}
+  .spark polyline{filter:drop-shadow(0 0 4px rgba(160,107,255,.45))}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span> 1COMMERCE&nbsp;<span class="mut">TERMINAL</span></div>
+  <div class="tape" id="tape"></div>
+  <div class="acct">
+    <div><div class="mut" style="font-size:10px;text-transform:uppercase">Equity</div>
+      <div class="eq num" id="eq">—</div></div>
+    <span class="pill" id="daypl">—</span>
+  </div>
+  <div class="sysstat" id="sysstat"></div>
+  <span id="alertbell" onclick="showTab('alerts')" title="Alerts" style="cursor:pointer;position:relative;padding:3px 7px;font-size:15px">🔔<span id="alertbadge" style="display:none;position:absolute;top:-3px;right:-4px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center"></span></span>
+  <span class="kx" style="cursor:pointer;padding:3px 7px" onclick="cmdkOpen()" title="Command palette (Ctrl/Cmd-K)">⌘K</span>
+  <div class="status"><span class="live"></span><span id="updated">connecting…</span></div>
+</header>
+<div class="newsbar"><div class="lbl">LIVE · WSB</div><div class="marquee" id="newsmarquee"></div></div>
+<div class="tabnav" id="tabnav">
+  <button data-t="overview" class="on" onclick="showTab('overview')">Overview</button>
+  <button data-t="flow" onclick="showTab('flow')">Decision Flow</button>
+  <button data-t="agents" onclick="showTab('agents')">Agents &amp; Mesh</button>
+  <button data-t="intel" onclick="showTab('intel')">Intelligence</button>
+  <button data-t="neural" onclick="showTab('neural')">Neural</button>
+  <button data-t="daytrader" onclick="showTab('daytrader')">Day Trader</button>
+  <button data-t="performance" onclick="showTab('performance')">Performance</button>
+  <button data-t="news" onclick="showTab('news')">News</button>
+  <button data-t="timeline" onclick="showTab('timeline')">Timeline</button>
+  <button data-t="alerts" onclick="showTab('alerts')">Alerts</button>
+  <button data-t="council" onclick="showTab('council')">Council Chat</button>
+  <button data-t="all" onclick="showTab('all')">All</button>
+</div>
+
+<div class="wrap">
+  <!-- KPI ROW -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- MAIN GRID -->
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="col">
+      <div class="card">
+        <h3>Positions <span class="tabs" id="postabs">
+          <button class="on" data-t="open">OPEN</button><button data-t="closed">PERF</button></span></h3>
+        <div id="positions" class="scroll"></div>
+      </div>
+      <div class="card">
+        <h3>Watchlist · Armed</h3>
+        <div id="watchlist" class="scroll"></div>
+      </div>
+    </div>
+
+    <!-- CENTER -->
+    <div class="col">
+      <div class="card">
+        <h3>Account Equity vs S&amp;P 500
+          <span class="seg" id="eqseg">
+            <button data-r="all" class="on">ALL</button>
+            <button data-r="20">20D</button><button data-r="10">10D</button></span></h3>
+        <div class="chartwrap"><canvas id="eqchart"></canvas></div>
+        <div class="legend"><span><i style="background:var(--blue)"></i>Strategy</span>
+          <span><i style="background:var(--muted)"></i>SPY</span></div>
+      </div>
+      <div class="card">
+        <div class="px-head">
+          <input class="symin" id="symin" value="AAPL" spellcheck="false"/>
+          <div class="p num" id="pxlast">—</div>
+          <div class="num" id="pxchg">—</div>
+          <span class="seg" style="margin-left:auto" id="pxseg">
+            <button data-n="60" class="on">3M</button><button data-n="120">6M</button><button data-n="250">1Y</button></span>
+        </div>
+        <div class="chartwrap" style="height:320px"><canvas id="pxchart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="col">
+      <div class="card">
+        <h3>Market Brain</h3>
+        <div class="body" id="brain"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Confluence Brain <span class="mut" id="confreg" style="font-size:10px"></span></h3>
+        <div id="confluence" class="scroll"></div>
+      </div>
+      <div class="card">
+        <h3>ML Model <span class="mut" id="mlmeta" style="font-size:10px"></span></h3>
+        <div class="body" id="mlcard"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Bots</h3>
+        <div id="bots"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom">
+    <div class="card">
+      <h3>Decision Flow <span class="mut" id="decmeta" style="font-size:11px"></span></h3>
+      <div class="chartwrap" style="height:240px"><canvas id="decchart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Latest Headlines</h3>
+      <div id="news" class="scroll" style="max-height:240px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Autonomous Agent Desk <span class="mut" id="agreg" style="font-size:10px"></span></h3>
+    <div id="aghealth" style="padding:8px 13px;border-bottom:1px solid var(--line);display:flex;gap:7px;flex-wrap:wrap"></div>
+    <div style="display:grid;grid-template-columns:280px 1fr 290px">
+      <div id="agroster" style="border-right:1px solid var(--line);padding:4px 0"></div>
+      <div id="agfeed" class="scroll" style="max-height:320px;border-right:1px solid var(--line)"></div>
+      <div id="agapprovals" class="scroll" style="max-height:320px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>WallStreetBets <span class="mut" id="wsbmeta" style="font-size:10px"></span></h3>
+    <div style="display:grid;grid-template-columns:280px 1fr">
+      <div id="wsbbuzz" style="border-right:1px solid var(--line);padding:8px 0"></div>
+      <div id="wsbposts" class="scroll" style="max-height:300px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Live Signal Scorecard <span class="mut" style="font-size:10px">forward hit-rate by source — matures over days</span></h3>
+    <div id="sigscore"></div>
+  </div>
+
+  <div class="card">
+    <h3>Prediction Engine <span class="mut" id="predmeta" style="font-size:10px"></span></h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr">
+      <div id="predplans" class="scroll" style="max-height:300px;border-right:1px solid var(--line)"></div>
+      <div id="predmatrix" class="scroll" style="max-height:300px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Insight Mesh <span class="mut" style="font-size:10px">brain · prediction · ml · council · agents · LTM</span></h3>
+    <div id="meshfeed" class="scroll" style="max-height:280px"></div>
+  </div>
+
+  <div class="card" id="councilcard">
+    <h3>Council Chat <span class="mut" style="font-size:10px">ask every model — they answer, cross-talk, a chair synthesizes</span></h3>
+    <div id="chatlog" class="scroll" style="min-height:260px;max-height:440px;padding:8px 0"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 13px 0">
+      <button class="btn" onclick="quickAsk('What should I watch today and why?')">What to watch</button>
+      <button class="btn" onclick="quickAsk('What is the single biggest risk to the book right now?')">Biggest risk</button>
+      <button class="btn" onclick="quickAsk('Given the regime, should we be net long, short, or in cash?')">Long or short?</button>
+      <button class="btn" onclick="quickAsk('What is the highest-conviction setup across all our signals right now?')">Best setup</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:10px 13px;border-top:1px solid var(--line)">
+      <input id="chatsym" class="symin" placeholder="SYM" style="width:80px" spellcheck="false"/>
+      <input id="chatq" placeholder="Ask the council anything…" autocomplete="off"
+        style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 13px;font-size:13px"/>
+      <button class="btn green" id="chatsend" onclick="councilSend()">Send</button>
+    </div>
+  </div>
+  <!-- ===== DAY TRADER ===== -->
+  <div data-sec="daytrader" style="display:none">
+    <div class="bottom">
+      <div class="card">
+        <h3>Transformer Forecast <input id="dtsym" class="symin" value="SPY"/></h3>
+        <div class="body" id="dt_forecast"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Market Regime</h3>
+        <div class="body" id="dt_regime"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="card">
+        <h3>Confluence Desk</h3>
+        <div class="body" id="dt_confluence"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Live Signal Scorecard</h3>
+        <div class="body" id="dt_signals"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ACTIVITY TIMELINE ===== -->
+  <div data-sec="timeline" style="display:none">
+    <div class="card">
+      <h3>Activity Timeline <span class="mut" style="font-size:10px">unified chronological tape — trades · news · agents · autonomy · mesh</span></h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 13px;border-bottom:1px solid var(--line)">
+        <span class="seg" id="tlfilters">
+          <button data-k="" class="on">All</button><button data-k="trade">Trades</button><button data-k="news">News</button><button data-k="agent">Agents</button><button data-k="autonomy">Autonomy</button><button data-k="mesh">Mesh</button>
+        </span>
+        <span style="flex:1"></span>
+        <span id="tlmeta" class="mut" style="font-size:11px"></span>
+      </div>
+      <div class="body" id="tlfeed"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== NEURAL ===== -->
+  <div data-sec="neural" style="display:none">
+    <div class="grid2">
+      <div class="card">
+        <h3>Neural Core · Cortex <span class="mut" style="font-size:10px" id="cxstate">conviction · saliency · calibration</span></h3>
+        <div class="body" id="cxpanel"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Transformer · tnet <span class="mut" style="font-size:10px">forecast term-structure · accuracy · ensemble</span>
+          <span class="tabs" style="float:right"><input id="tnetsym" placeholder="SPY" style="background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:5px;padding:2px 7px;width:70px;font-size:11px"></span></h3>
+        <div class="body" id="tnetpanel"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:13px">
+      <div class="card">
+        <h3>Reasoning Trace <span class="mut" style="font-size:10px">the 'why' behind each conviction</span></h3>
+        <div style="display:flex;gap:8px;align-items:center;padding:8px 13px;border-bottom:1px solid var(--line)">
+          <span class="seg" id="rsnfilter"><button data-g="" class="on">All</button><button data-g="1">Gated only</button></span>
+          <span style="flex:1"></span><span id="rsnstats" class="mut" style="font-size:11px"></span>
+        </div>
+        <div class="body" id="rsnpanel"><div class="empty">loading…</div></div>
+      </div>
+      <div class="card">
+        <h3>Agent Mesh · Graph <span class="mut" style="font-size:10px">layer volume · co-mention links · salience</span></h3>
+        <div class="body" id="meshgpanel"><div class="empty">loading…</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:13px">
+      <h3>Mesh Intelligence <span class="mut" style="font-size:10px">cross-layer consensus · priority inbox · themes · anomalies</span></h3>
+      <div class="body" id="meshintel"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== ALERTS ===== -->
+  <div data-sec="alerts" style="display:none">
+    <div class="card">
+      <h3>Alerts <span class="mut" style="font-size:10px">the few things worth a human's attention — service health · regime · autonomy · edge</span>
+        <span class="tabs" style="float:right"><button id="alertackall" onclick="ackAlert('all')">Ack all</button></span></h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 13px;border-bottom:1px solid var(--line)">
+        <span class="seg" id="alertfilters">
+          <button data-s="" class="on">All</button><button data-s="critical">Critical</button><button data-s="warn">Warn</button><button data-s="info">Info</button>
+        </span>
+        <span style="flex:1"></span>
+        <span id="alertmeta" class="mut" style="font-size:11px"></span>
+      </div>
+      <div class="body" id="alertfeed"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== NEWS AGGREGATOR ===== -->
+  <div data-sec="news" style="display:none">
+    <div class="card">
+      <h3>News Aggregator <span class="mut" style="font-size:10px" id="newsmeta">all sources · sentiment-tagged · symbol-tagged</span></h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 13px;border-bottom:1px solid var(--line)">
+        <span class="seg" id="newsfilters">
+          <button data-c="" class="on">All</button><button data-c="markets">Markets</button><button data-c="ticker">Tickers</button><button data-c="filing">SEC 8-K</button><button data-c="social">WSB</button>
+        </span>
+        <input id="newsq" placeholder="search headlines…" class="symin" style="width:200px;text-transform:none"/>
+        <span style="flex:1"></span>
+        <span id="newssent" class="mut" style="font-size:11px"></span>
+      </div>
+      <div class="body" id="newsfeed"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ===== PERFORMANCE ===== -->
+  <div data-sec="performance" style="display:none">
+    <div class="card">
+      <h3>Autonomy Controller <span class="mut" style="font-size:10px">platform-wide self-tuning · evidence-guarded · two-tier safety + kill-switch</span></h3>
+      <div class="body" id="perf_autonomy"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>Forward Edge Report <span class="mut" style="font-size:10px" id="edgemeta">resolved on realized forward outcomes — vs coin flip & SPY buy-and-hold</span></h3>
+      <div class="body" id="perf_edge"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>Voice Attribution <span class="mut" style="font-size:10px">which voice actually makes money — realized P&amp;L decomposed by share of composite</span></h3>
+      <div class="body" id="perf_attr"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>Voices — weights &amp; controls <span class="mut" style="font-size:10px">mute drops a voice from confluence · pin locks its weight against learning</span></h3>
+      <div class="body" id="perf_voices"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>Shadow Lab — configuration bake-off <span class="mut" style="font-size:10px">alternative configs traded in parallel, resolved forward — which config makes money</span></h3>
+      <div class="body" id="perf_shadow"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <h3>Neural Core <span class="mut" style="font-size:10px">nonlinear MLP fuser over the voices — learns interactions, proves itself in the Shadow Lab before going live</span></h3>
+      <div class="body" id="perf_cortex"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="cmdk-ov" id="cmdkov">
+  <div class="cmdk">
+    <input id="cmdkin" placeholder="Jump to a tab, set a symbol, control autonomy…" autocomplete="off" spellcheck="false"/>
+    <div class="results" id="cmdkres"></div>
+    <div class="hint"><span><b class="kx">↑↓</b> navigate</span><span><b class="kx">↵</b> run</span><span><b class="kx">esc</b> close</span><span><b class="kx">1–8</b> tabs</span></div>
+  </div>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmtUSD = (n,d=2)=> (n==null||isNaN(n))?'—':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtPct = n => (n==null||isNaN(n))?'—':(n>=0?'+':'')+Number(n).toFixed(2)+'%';
+const cls = n => n>=0?'pos':'neg';
+async function J(u){ try{const r=await fetch(u);if(!r.ok)throw 0;return await r.json();}catch(e){return null;} }
+
+/* ---------- gauges (SVG) ---------- */
+function donut(pct,color,label){
+  pct=Math.max(0,Math.min(100,pct||0));const r=22,c=2*Math.PI*r,off=c*(1-pct/100);
+  return `<svg class="gauge" width="56" height="56" viewBox="0 0 56 56">
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="#1c2531" stroke-width="6"/>
+    <circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="6"
+      stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"
+      transform="rotate(-90 28 28)"/>
+    <text x="28" y="32" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">${label}</text></svg>`;
+}
+
+/* ---------- KPIs ---------- */
+async function loadKpis(){
+  const a=await J('/api/analytics'), sc=await J('/api/scorecard');
+  if(!a){return;}
+  const k=[];
+  k.push(['Total Return',fmtPct(a.total_return_pct),'vs SPY '+fmtPct(a.vs_spy_pct),
+          donut(Math.min(100,Math.abs(a.total_return_pct)*6),a.total_return_pct>=0?'var(--green)':'var(--red)',
+          (a.total_return_pct>=0?'+':'')+a.total_return_pct.toFixed(1)), cls(a.total_return_pct)]);
+  k.push(['Realized P&L',fmtUSD(a.realized_pl),'unreal '+fmtUSD(a.unrealized_pl),
+          donut(50,a.realized_pl>=0?'var(--green)':'var(--red)','P&L'), cls(a.realized_pl)]);
+  k.push(['Open Win Rate',(a.open_win_rate??0).toFixed(1)+'%',a.open_positions+' open',
+          donut(a.open_win_rate,'var(--green)',Math.round(a.open_win_rate)+'%'),'pos']);
+  k.push(['Day P&L',fmtUSD(a.day_pl),fmtPct(a.day_pl/ (a.equity||1)*100),
+          donut(50,a.day_pl>=0?'var(--green)':'var(--red)','Day'), cls(a.day_pl)]);
+  k.push(['Max Drawdown',fmtPct(a.max_drawdown_pct),'risk control',
+          donut(Math.min(100,Math.abs(a.max_drawdown_pct)*12),'var(--amber)',a.max_drawdown_pct.toFixed(1)),'neg']);
+  if(sc) k.push(['Scorecard',(sc.composite??0).toFixed(0),'acc '+sc.exec_accuracy+'% · sel '+sc.selectivity+'%',
+          donut(sc.composite,'var(--blue)',Math.round(sc.composite)),'']);
+  try{
+    const ph=await J('/api/portfolio_history?days=30');
+    if(ph&&ph.equity_pct&&ph.equity_pct.length>1){
+      const last=ph.equity_pct[ph.equity_pct.length-1];
+      const sp='<div style="width:64px;height:42px">'+sparkSVG(ph.equity_pct,last>=0?'var(--green)':'var(--red)')+'</div>';
+      k.unshift(['Equity · 30d',fmtPct(last),'vs SPY '+fmtPct((ph.spy_pct||[]).slice(-1)[0]||0),sp,cls(last)]);
+    }
+  }catch(e){}
+  $('#kpis').innerHTML=k.map(x=>`<div class="card kpi">
+     ${x[3]}<div class="meta"><div class="lbl">${x[0]}</div>
+     <div class="val num ${x[4]}">${x[1]}</div><div class="sub mut">${x[2]}</div></div></div>`).join('');
+}
+
+/* ---------- account header + positions ---------- */
+let POS_SYMS=[];
+async function loadAccount(){
+  const a=await J('/api/account'); if(!a)return;
+  $('#eq').textContent=fmtUSD(a.equity);
+  const dp=$('#daypl'); dp.textContent=fmtUSD(a.day_pl)+' ('+fmtPct(a.day_pl_pct)+')';
+  dp.className='pill '+(a.day_pl>=0?'up':'down');
+  POS_SYMS=(a.positions||[]).map(p=>p.symbol);
+  renderPositions(a.positions||[]);
+}
+function renderPositions(ps){
+  if(window._postab==='closed'){ renderPerf(); return; }
+  if(!ps.length){$('#positions').innerHTML='<div class="empty">No open positions</div>';return;}
+  $('#positions').innerHTML=ps.sort((x,y)=>y.unrealized_pl-x.unrealized_pl).map(p=>`
+    <div class="row"><div><div class="sym">${p.symbol}
+       <span class="tag ${p.side}">${p.side}</span></div>
+       <div class="meta num">${p.qty} @ ${fmtUSD(p.avg_entry)}</div></div>
+     <div style="text-align:right"><div class="num ${cls(p.unrealized_pl)}">${fmtUSD(p.unrealized_pl)}</div>
+       <div class="meta num ${cls(p.unrealized_plpc)}">${fmtPct(p.unrealized_plpc)}</div></div></div>`).join('');
+}
+async function renderPerf(){
+  const a=await J('/api/analytics'); if(!a){return;}
+  const d=a.decisions||{};
+  $('#positions').innerHTML=`<div class="body">
+    <div class="row"><span class="mut">Total return</span><span class="num ${cls(a.total_return_pct)}">${fmtPct(a.total_return_pct)}</span></div>
+    <div class="row"><span class="mut">Realized P&L</span><span class="num ${cls(a.realized_pl)}">${fmtUSD(a.realized_pl)}</span></div>
+    <div class="row"><span class="mut">vs SPY</span><span class="num ${cls(a.vs_spy_pct)}">${fmtPct(a.vs_spy_pct)}</span></div>
+    <div class="row"><span class="mut">Orders placed</span><span class="num">${d.orders||0}</span></div>
+    <div class="row"><span class="mut">Decisions</span><span class="num">${d.total_decisions||0}</span></div></div>`;
+}
+
+/* ---------- watchlist ---------- */
+async function loadWatch(){
+  const w=await J('/api/watchlist'); const el=$('#watchlist');
+  const items=(w&&w.items)||[];
+  if(!items.length){el.innerHTML='<div class="empty">No armed catalysts</div>';return;}
+  el.innerHTML=items.slice(0,12).map(i=>`
+    <div class="row"><div style="min-width:0"><div class="sym">${i.symbol}
+       <span class="tag ${i.thesis}">${i.thesis}</span>
+       <span class="tag watch">${i.status}</span></div>
+       <div class="meta" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px">${i.catalyst||''}</div></div>
+     <div style="text-align:right"><div class="num">${fmtUSD(i.trigger)}</div>
+       <div class="meta num">arm ${fmtUSD(i.armed_price)}</div></div></div>`).join('');
+}
+
+/* ---------- market brain ---------- */
+function trendWord(v){return v>=2?'strong↑':v>=1?'up↑':v<=-2?'strong↓':v<=-1?'down↓':'flat→';}
+function trendCol(v){return v>0?'var(--green)':v<0?'var(--red)':'var(--muted)';}
+async function loadBrain(){
+  const b=await J('/api/marketbrain'); const el=$('#brain'); if(!b){el.innerHTML='<div class="empty">unavailable</div>';return;}
+  const rc=b.regime==='risk_on'?'var(--green)':b.regime==='risk_off'?'var(--red)':b.regime==='high_vol'?'var(--amber)':'var(--blue)';
+  const conf=Math.round((b.regime_confidence||0)*100);
+  const p=b.posture||{}, cp=b.crypto_posture||{};
+  el.innerHTML=`
+    <div class="regimebar">
+      <span class="regimebadge" style="background:${rc}22;color:${rc}">${(b.regime||'').replace('_',' ')}</span>
+      <div style="flex:1"><div class="mut" style="font-size:10px">confidence ${conf}%</div>
+        <div class="bar"><i style="width:${conf}%;background:${rc}"></i></div></div></div>
+    <div class="trendgrid">
+      ${[['SPY',b.spy_trend],['QQQ',b.qqq_trend],['IWM',b.iwm_trend],['TLT',b.tlt_trend],['GLD',b.gld_trend],['HYG',b.hyg_trend],['BTC',b.btc_trend],['Breadth',Math.round((b.breadth||0)*4-2)],['Vol%',null]]
+        .map(t=>`<div class="tcell"><div class="k">${t[0]}</div>
+          <div class="v" style="color:${t[0]==='Vol%'?'var(--amber)':trendCol(t[1])}">${t[0]==='Vol%'?(b.spy_vol_ann||0).toFixed(0):trendWord(t[1])}</div></div>`).join('')}
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--panel2);border-radius:8px;border:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between"><span class="mut">Equity posture</span>
+        <b>${p.bias||'—'} · ${(p.size_mult??1)}x</b></div>
+      <div class="mut" style="font-size:11px;margin-top:3px">${p.note||''}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px"><span class="mut">Crypto posture</span>
+        <b>${cp.bias||'—'} · ${(cp.size_mult??1)}x</b></div>
+      <div class="mut" style="font-size:11px;margin-top:3px">${cp.note||''}</div></div>`;
+}
+
+/* ---------- confluence ---------- */
+async function loadConfluence(){
+  const syms=(POS_SYMS.length?POS_SYMS:['AAPL','MSFT','NVDA','XOM','JNJ']).slice(0,10);
+  const c=await J('/api/confluence?symbols='+encodeURIComponent(syms.join(','))); const el=$('#confluence');
+  if(!c||!c.items){el.innerHTML='<div class="empty">unavailable</div>';return;}
+  $('#confreg').textContent='regime: '+(c.regime||'');
+  const valid=c.items.filter(i=>!i.error);
+  if(!valid.length){el.innerHTML='<div class="empty">no scored symbols</div>';return;}
+  el.innerHTML=valid.sort((a,b)=>Math.abs(b.composite)-Math.abs(a.composite)).map(i=>{
+    const w=Math.round(Math.abs(i.composite)*100), col=i.composite>=0?'var(--green)':'var(--red)';
+    const sd=i.scores||{};
+    return `<div class="row"><div style="min-width:0"><div class="sym">${i.symbol}
+       <span class="tag ${i.side==='buy'?'buy':'sell'}">${i.side}</span>
+       ${i.pass?'<span class="tag buy">PASS</span>':'<span class="tag neutral">block</span>'}</div>
+       <div class="meta">ta ${(sd.ta??0).toFixed(2)} · q ${(sd.quant??0).toFixed(2)} · f ${(sd.fundamental??0).toFixed(2)} · ml ${(sd.ml??0).toFixed(2)} · ${i.agree}/${i.n}</div></div>
+     <div style="text-align:right;min-width:74px"><div class="num" style="color:${col};font-weight:700">${(i.composite>=0?'+':'')+i.composite.toFixed(2)}</div>
+       <div class="bar" style="margin-top:4px"><i style="width:${w}%;background:${col}"></i></div></div></div>`;
+  }).join('');
+}
+
+/* ---------- bots ---------- */
+async function loadBots(){
+  const b=await J('/api/bots'); const el=$('#bots'); const bots=(b&&b.bots)||[];
+  if(!bots.length){el.innerHTML='<div class="empty">no bots</div>';return;}
+  el.innerHTML=bots.map(bo=>{
+    const run=bo.status==='running';
+    return `<div class="botrow"><div><div class="sym"><span class="dotstat ${run?'run':'stop'}"></span>${bo.name}</div>
+       <div class="meta">${run?'pid '+bo.pid:'stopped'} · $${bo.params?.notional??'—'}/trade</div></div>
+     <button class="btn ${run?'red':'green'}" onclick="toggleBot('${bo.id}','${run?'stop':'start'}')">${run?'Stop':'Start'}</button></div>`;
+  }).join('');
+}
+async function toggleBot(id,act){ await fetch('/api/bots/'+id+'/'+act,{method:'POST'}); setTimeout(loadBots,800); }
+
+/* ---------- equity chart ---------- */
+let eqChart, EQRANGE='all';
+async function loadEquity(){
+  const h=await J('/api/portfolio_history'); if(!h||!h.t)return;
+  let t=h.t, ep=h.equity_pct||[], sp=h.spy_pct||[];
+  if(EQRANGE!=='all'){const n=parseInt(EQRANGE);t=t.slice(-n);ep=ep.slice(-n);sp=sp.slice(-n);}
+  // underwater (drawdown) series: equity below its running peak
+  let peak=-1e9; const dd=ep.map(v=>{peak=Math.max(peak,v);return Math.round((v-peak)*100)/100;});
+  const maxDD=Math.min(0,...dd);
+  const ctx=$('#eqchart').getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,300);g.addColorStop(0,'rgba(59,130,246,.35)');g.addColorStop(1,'rgba(59,130,246,0)');
+  const cfg={type:'line',data:{labels:t,datasets:[
+      {label:'Strategy',data:ep,borderColor:'#3b82f6',backgroundColor:g,fill:true,tension:.25,pointRadius:0,borderWidth:2},
+      {label:'SPY',data:sp,borderColor:'#8b97a7',borderDash:[5,4],fill:false,tension:.25,pointRadius:0,borderWidth:1.5},
+      {label:'Drawdown',data:dd,borderColor:'transparent',backgroundColor:'rgba(234,57,67,.16)',fill:true,tension:.2,pointRadius:0,yAxisID:'y1'}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtPct(c.parsed.y)}}},
+      scales:{x:{grid:{color:'#141c28'},ticks:{color:'#5b6675',maxTicksLimit:8,font:{size:10}}},
+        y:{grid:{color:'#141c28'},ticks:{color:'#5b6675',callback:v=>v+'%',font:{size:10}}},
+        y1:{display:false,position:'right',max:0,min:(maxDD<0?maxDD*4:-1)}}}};
+  if(eqChart)eqChart.destroy(); eqChart=new Chart(ctx,cfg);
+}
+
+/* ---------- candlestick price chart (custom canvas) ---------- */
+let PXN=60, PXSYM='AAPL';
+async function loadPrice(){
+  const d=await J('/api/bars?symbol='+encodeURIComponent(PXSYM)); const cv=$('#pxchart');
+  if(!d||!d.t||!d.t.length){cv.getContext('2d').clearRect(0,0,cv.width,cv.height);$('#pxlast').textContent='no data';return;}
+  const o=d.o||[],hi=d.h||[],lo=d.l||[],c=d.c||[];
+  let n=Math.min(PXN,c.length), s=c.length-n;
+  const O=o.slice(s),H=hi.slice(s),L=lo.slice(s),C=c.slice(s),T=d.t.slice(s),V=(d.v||[]).slice(s);
+  const last=C[C.length-1], prev=C[0], chg=(last/prev-1)*100;
+  $('#pxlast').textContent=fmtUSD(last); $('#pxlast').className='p num';
+  $('#pxchg').textContent=fmtPct(chg); $('#pxchg').className='num '+cls(chg);
+  drawCandles(cv,O,H,L,C,V);
+}
+function sma(arr,p){const out=Array(arr.length).fill(null);let sum=0;for(let i=0;i<arr.length;i++){sum+=arr[i];if(i>=p)sum-=arr[i-p];if(i>=p-1)out[i]=sum/p;}return out;}
+function drawCandles(cv,O,H,L,C,V){
+  const dpr=window.devicePixelRatio||1, W=cv.clientWidth, Ht=cv.clientHeight;
+  cv.width=W*dpr; cv.height=Ht*dpr; const x=cv.getContext('2d'); x.scale(dpr,dpr);
+  x.clearRect(0,0,W,Ht);
+  const hasV=V&&V.length&&Math.max(...V)>0, volH=hasV?32:0;
+  const padL=8,padR=54,padT=12,padB=18, plotH=Ht-padT-padB-volH, plotW=W-padL-padR;
+  const lo=Math.min(...L), hi=Math.max(...H), rng=(hi-lo)||1;
+  const yy=p=>padT+plotH*(1-(p-lo)/rng);
+  x.strokeStyle='#141c28';x.fillStyle='#5b6675';x.font='10px Inter';x.textAlign='left';
+  for(let i=0;i<=4;i++){const py=padT+plotH*i/4, pv=hi-rng*i/4;
+    x.beginPath();x.moveTo(padL,py);x.lineTo(W-padR,py);x.stroke();
+    x.fillText(pv.toFixed(2),W-padR+4,py+3);}
+  const n=C.length, cw=plotW/n, bw=Math.max(1.2,Math.min(9,cw*0.62));
+  // volume sub-band
+  if(hasV){const vmax=Math.max(...V)||1, vy0=Ht-padB;
+    for(let i=0;i<n;i++){const cx=padL+cw*(i+0.5), vh=volH*(V[i]/vmax), up=C[i]>=O[i];
+      x.fillStyle=up?'rgba(22,199,132,.35)':'rgba(234,57,67,.35)';
+      x.fillRect(cx-bw/2, vy0-vh, bw, Math.max(0.5,vh));}}
+  // candles
+  for(let i=0;i<n;i++){
+    const cx=padL+cw*(i+0.5), up=C[i]>=O[i], col=up?'#16c784':'#ea3943';
+    x.strokeStyle=col;x.fillStyle=col;x.lineWidth=1;
+    x.beginPath();x.moveTo(cx,yy(H[i]));x.lineTo(cx,yy(L[i]));x.stroke();
+    const yo=yy(O[i]),yc=yy(C[i]); x.fillRect(cx-bw/2,Math.min(yo,yc),bw,Math.max(1,Math.abs(yc-yo)));
+  }
+  // SMA overlays
+  const drawSMA=(arr,col)=>{x.strokeStyle=col;x.lineWidth=1.4;x.beginPath();let st=false;
+    for(let i=0;i<n;i++){if(arr[i]==null)continue;const cx=padL+cw*(i+0.5),py=yy(arr[i]);
+      if(!st){x.moveTo(cx,py);st=true;}else x.lineTo(cx,py);}x.stroke();};
+  if(n>=20)drawSMA(sma(C,20),'#f0b90b');
+  if(n>=50)drawSMA(sma(C,50),'#a06bff');
+  x.font='9px Inter';x.fillStyle='#f0b90b';x.fillText('SMA20',padL,padT-2);
+  x.fillStyle='#a06bff';x.fillText('SMA50',padL+38,padT-2);
+}
+
+/* ---------- decisions chart ---------- */
+let decChart;
+async function loadDecisions(){
+  const s=await J('/api/scoreboard'); if(!s)return;
+  $('#decmeta').textContent=`${s.total_decisions} decisions · ${s.orders} orders · avg conf ${(s.avg_confidence||0).toFixed(2)}`;
+  const ba=s.by_action||{}; const keys=Object.keys(ba); const vals=keys.map(k=>ba[k]);
+  const colors=keys.map(k=>k==='order'?'#16c784':k.startsWith('skip')?'#5b6675':k.includes('fail')?'#ea3943':k.includes('watch')?'#f0b90b':'#3b82f6');
+  const ctx=$('#decchart').getContext('2d');
+  const cfg={type:'bar',data:{labels:keys,datasets:[{data:vals,backgroundColor:colors,borderRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:'#5b6675',font:{size:9},maxRotation:40,minRotation:40}},
+        y:{grid:{color:'#141c28'},ticks:{color:'#5b6675',font:{size:10}}}}}};
+  if(decChart)decChart.destroy(); decChart=new Chart(ctx,cfg);
+}
+
+/* ---------- news ---------- */
+async function loadNews(){
+  const w=await J('/api/news'); const el=$('#news'); const items=(w&&w.items)||[];
+  if(!items.length){el.innerHTML='<div class="empty">no headlines</div>';return;}
+  el.innerHTML=items.slice(0,14).map(i=>`<div class="row" style="display:block">
+    <a href="${i.link}" target="_blank" style="font-weight:600;color:var(--txt)">${i.title}</a>
+    <div class="meta" style="margin-top:3px">${i.source||''}</div></div>`).join('');
+}
+
+/* ---------- ML model card ---------- */
+async function loadML(){
+  const m=await J('/api/ml'); const el=$('#mlcard'); if(!m||!m.trained){el.innerHTML='<div class="empty">no model yet</div>';return;}
+  $('#mlmeta').textContent='AUC '+(m.auc??'—');
+  const imp=m.importances||{}; const top=Object.entries(imp).slice(0,6); const mx=top.length?top[0][1]:1;
+  el.innerHTML=`<div style="display:flex;gap:16px;margin-bottom:11px">
+     <div><div class="mut" style="font-size:10px">VAL AUC</div><div style="font-size:20px;font-weight:700">${m.auc}</div></div>
+     <div><div class="mut" style="font-size:10px">ACCURACY</div><div style="font-size:20px;font-weight:700">${((m.acc||0)*100).toFixed(1)}%</div></div>
+     <div><div class="mut" style="font-size:10px">EDGE</div><div style="font-size:20px;font-weight:700" class="${m.edge>=0?'pos':'neg'}">${(m.edge>=0?'+':'')+((m.edge||0)*100).toFixed(1)}pp</div></div></div>
+   <div class="mut" style="font-size:10px;margin-bottom:6px">FEATURE IMPORTANCE · ${m.n_train||0} train samples · ${m.promoted?'<span class="pos">promoted</span>':'champion held'}</div>
+   ${top.map(([k,v])=>`<div style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <span style="width:64px;font-size:11px">${k}</span>
+      <div class="bar" style="flex:1"><i style="width:${Math.round(v/mx*100)}%;background:var(--purple)"></i></div>
+      <span class="num" style="font-size:11px;width:38px;text-align:right">${(v*100).toFixed(0)}%</span></div>`).join('')}`;
+}
+
+/* ---------- autonomous agent desk ---------- */
+const PROVCOL={cloudflare:'var(--amber)',groq:'var(--purple)',vercel:'var(--blue)',cohere:'var(--green)'};
+function agIcon(kind){return kind==='action'?'⚙':kind==='denied'?'⛔':kind==='proposal'?'✎':'·';}
+async function loadHealth(){
+  const h=await J('/api/agents/health'); const el=$('#aghealth'); if(!h||!h.services){el.innerHTML='<span class="mut" style="font-size:11px">health: starting…</span>';return;}
+  el.innerHTML='<span class="mut" style="font-size:11px;margin-right:4px">SYSTEM</span>'+Object.entries(h.services).map(([k,up])=>
+    `<span class="tag" style="background:${up?'var(--green-bg)':'var(--red-bg)'};color:${up?'var(--green)':'var(--red)'}">${up?'●':'○'} ${k}</span>`).join('');
+}
+async function approve(id,decision){ await fetch('/api/agents/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,decision})}); setTimeout(loadApprovals,500); setTimeout(loadAgents,800); }
+async function loadApprovals(){
+  const d=await J('/api/agents/approvals'); const el=$('#agapprovals'); const ps=(d&&d.pending)||[];
+  el.innerHTML='<div class="mut" style="font-size:10px;padding:6px 13px;border-bottom:1px solid var(--line)">HUMAN APPROVALS ('+ps.length+')</div>'+
+    (ps.length?ps.map(a=>`<div class="row" style="display:block;padding:8px 13px">
+      <div><b>${a.agent}</b> <span class="tag neutral">${a.action}</span></div>
+      <div class="meta" style="margin:3px 0">${JSON.stringify(a.payload&&a.payload.args||{}).slice(0,90)}</div>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="btn green" onclick="approve(${a.id},'approved')">Approve</button>
+        <button class="btn red" onclick="approve(${a.id},'rejected')">Reject</button></div></div>`).join('')
+     :'<div class="empty">no pending approvals</div>');
+}
+async function loadTraces(){
+  const d=await J('/api/agents/traces'); const el=$('#agfeed'); const ts=(d&&d.traces)||[];
+  if(!ts.length){el.innerHTML='<div class="empty">no traces yet</div>';return;}
+  el.innerHTML='<div class="mut" style="font-size:10px;padding:6px 13px;border-bottom:1px solid var(--line)">EXECUTION TRACES</div>'+
+    ts.slice(0,40).map(t=>{const col=t.status==='done'||t.status==='ok'?'var(--green)':t.status==='failed'?'var(--red)':'var(--muted)';
+    return `<div class="row" style="display:block;padding:6px 13px">
+      <span class="num" style="color:var(--dim);font-size:10px">${(t.ts||'').slice(11,16)}</span>
+      <b style="margin:0 6px">${t.agent||'?'}</b>
+      <span class="tag" style="background:#1c2531;color:var(--muted)">${t.tool||t.step||''}</span>
+      <span style="color:${col};font-size:11px;margin-left:4px">${t.status} · ${t.ms}ms</span>
+      <div class="meta" style="margin-top:2px">${(t.summary||'').slice(0,120)}</div></div>`;}).join('');
+}
+async function loadAgents(){
+  const d=await J('/api/agents'); if(!d)return;
+  const ov=d.overrides||{};
+  $('#agreg').textContent=Object.keys(ov).length?('overrides: '+Object.entries(ov).map(([k,v])=>k+'='+v).join(' · ')):'no overrides yet';
+  $('#agroster').innerHTML=(d.roster||[]).map(a=>`<div class="row" style="padding:8px 13px">
+     <div><div class="sym">${a.name}</div><div class="meta">${(a.tools||[]).join(', ')}</div></div>
+     <span class="tag" style="background:${PROVCOL[a.provider]||'#1c2531'}22;color:${PROVCOL[a.provider]||'var(--muted)'}">${a.provider}${a.model?(' · '+a.model.split('/').pop()):''}</span></div>`).join('')||'<div class="empty">no roster</div>';
+  const acts=d.activity||[];
+  if(false) $('#agfeed').innerHTML=acts.length?acts.map(e=>{
+    const t=(e.ts||'').slice(11,16); const col=e.kind==='action'?'var(--green)':e.kind==='denied'?'var(--red)':'var(--muted)';
+    return `<div class="row" style="display:block;padding:7px 13px">
+      <span class="num" style="color:var(--dim);font-size:10px">${t}</span>
+      <b style="margin:0 6px">${e.agent||'system'}</b>
+      <span style="color:${col};font-size:11px">${agIcon(e.kind)} ${e.kind}</span>
+      <div class="meta" style="margin-top:2px">${(e.summary||'').slice(0,160)}</div></div>`;
+  }).join(''):'<div class="empty">agents idle — desk starts on next cycle</div>';
+}
+
+/* ---------- WallStreetBets ---------- */
+async function loadWSB(){
+  const d=await J('/api/wsb'); if(!d)return;
+  $('#wsbmeta').textContent=(d.n_items||0)+' posts';
+  const tk=d.tickers||[];
+  $('#wsbbuzz').innerHTML='<div class="mut" style="font-size:10px;padding:2px 13px 6px">TOP BUZZ</div>'+
+    (tk.length?tk.map(t=>`<div class="row" style="padding:6px 13px">
+      <span class="sym" style="cursor:pointer" onclick="PXSYM='${t.symbol}';$('#symin').value='${t.symbol}';loadPrice()">${t.symbol}</span>
+      <span class="num mut">${t.mentions} mentions</span></div>`).join(''):'<div class="empty">no tickers</div>');
+  const it=d.items||[];
+  $('#wsbposts').innerHTML=it.length?it.map(i=>`<div class="row" style="display:block;padding:7px 13px">
+    <a href="${i.link}" target="_blank" style="font-weight:600;color:var(--txt)">${i.title}</a>
+    <div class="meta" style="margin-top:2px">${(i.ts||'').slice(0,16)}</div></div>`).join(''):'<div class="empty">no posts</div>';
+}
+function sdot(s){ const c=s>0.05?'var(--green)':s<-0.05?'var(--red)':'var(--dim)'; return `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:6px"></span>`; }
+async function loadNewsBar(){
+  const d=await J('/api/newshub?limit=22');
+  let parts=[];
+  if(d&&d.items) d.items.slice(0,22).forEach(i=>parts.push('<span>'+sdot(i.sentiment)+'<b>'+(i.source||'NEWS')+'</b> · '+i.title+(i.symbols&&i.symbols.length?' <span class="mut">['+i.symbols.join(',')+']</span>':'')+'</span>'));
+  if(!parts.length)parts=['<span class="mut">aggregating headlines…</span>'];
+  const html=parts.join('')+parts.join(''); // duplicate for seamless loop
+  $('#newsmarquee').innerHTML=html;
+}
+let TLKIND='';
+function tlColor(e){
+  if(e.kind==='trade')return e.tone>0?'var(--green)':e.tone<0?'var(--red)':'var(--blue)';
+  if(e.kind==='news')return e.tone>0?'var(--green)':e.tone<0?'var(--red)':'var(--amber)';
+  if(e.kind==='agent')return 'var(--blue)';
+  if(e.kind==='autonomy')return 'var(--purple)';
+  if(e.kind==='mesh')return '#36e2ff';
+  return 'var(--dim)';
+}
+function tlAgo(iso){ let s=(Date.now()-new Date(iso).getTime())/1000; if(s<0)s=0;
+  return s<60?(s|0)+'s':s<3600?((s/60)|0)+'m':s<86400?((s/3600)|0)+'h':((s/86400)|0)+'d'; }
+async function loadTimeline(){
+  const el=$('#tlfeed'); if(!el)return;
+  const d=await J('/api/timeline?limit=80'+(TLKIND?'&kind='+TLKIND:''));
+  if(!d){el.innerHTML='<div class="empty">no data</div>';return;}
+  const evs=d.events||[]; const m=$('#tlmeta'); if(m)m.textContent=evs.length+' events';
+  if(!evs.length){el.innerHTML='<div class="empty">no events yet</div>';return;}
+  el.innerHTML='<div class="scroll" style="max-height:620px">'+evs.map(e=>{
+    const col=tlColor(e); const hhmm=new Date(e.iso).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const sym=e.symbol?` <span class="tag neutral">${e.symbol}</span>`:'';
+    return `<div class="tlrow"><div class="rail"><div class="dot" style="background:${col};box-shadow:0 0 7px ${col}"></div><div class="line"></div></div>
+      <div class="b2"><div class="when">${hhmm} · ${tlAgo(e.iso)} ago</div>
+      <div class="txt"><span class="kchip">${e.kind}</span>${e.text}${sym}</div></div></div>`;
+  }).join('')+'</div>';
+}
+let ALERTSEV='', ALERT_SEEN={};
+function alertSevCol(s){ return s==='critical'?'var(--red)':s==='warn'?'var(--amber)':'var(--blue)'; }
+async function loadAlerts(){
+  const d=await J('/api/alerts?limit=80');
+  if(!d)return;
+  const cc=d.counts||{}; const n=cc.unack||0;
+  const badge=$('#alertbadge');
+  if(badge){ if(n>0){badge.style.display='';badge.textContent=n>99?'99+':n; badge.style.background=(cc.critical>0?'#ef4444':'#d97706');} else badge.style.display='none'; }
+  // toast on newly-seen criticals
+  (d.alerts||[]).forEach(a=>{ if(!ALERT_SEEN[a.id]){ ALERT_SEEN[a.id]=1; if(a.ack===0 && a.severity==='critical' && window.__alertsInit) toast(a.text,'err','🔔 Critical'); }});
+  window.__alertsInit=1;
+  const el=$('#alertfeed'); if(!el)return;
+  let its=(d.alerts||[]); if(ALERTSEV) its=its.filter(a=>a.severity===ALERTSEV);
+  const m=$('#alertmeta'); if(m)m.textContent=`${n} unACK · ${cc.critical||0} crit · ${cc.warn||0} warn`;
+  if(!its.length){el.innerHTML='<div class="empty">no alerts — all clear</div>';return;}
+  el.innerHTML='<div class="scroll" style="max-height:620px">'+its.map(a=>{
+    const col=alertSevCol(a.severity); const hhmm=new Date(a.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const acked=a.ack? ' style="opacity:.5"':'';
+    const btn=a.ack? '' : `<button onclick="ackAlert('${a.id}')" style="margin-left:auto;font-size:10px;padding:2px 8px">ACK</button>`;
+    return `<div class="row"${acked}><span class="swatch sm" style="background:${col};box-shadow:0 0 6px ${col}"></span>
+      <span class="tag neutral" style="width:70px;text-align:center;color:${col}">${a.severity}</span>
+      <span style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.text}</div>
+      <div class="mut" style="font-size:10px">${a.kind} · ${hhmm}</div></span>${btn}</div>`;
+  }).join('')+'</div>';
+}
+async function ackAlert(id){
+  await fetch('/api/alerts/ack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})});
+  loadAlerts();
+}
+/* ===================== Neural tab ===================== */
+let NEURALSYM='SPY', RSNGATE='';
+function sparkSVG(vals,color){
+  if(!vals||!vals.length) return '<div class="mut" style="font-size:10px">no history yet</div>';
+  const w=260,h=46,n=vals.length,mn=Math.min(...vals),mx=Math.max(...vals),rng=(mx-mn)||1;
+  const pts=vals.map((v,i)=>`${(i/(n-1||1)*w).toFixed(1)},${(h-((v-mn)/rng)*(h-6)-3).toFixed(1)}`).join(' ');
+  const mid=h-((0.5-mn)/rng)*(h-6)-3;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <line x1="0" x2="${w}" y1="${mid}" y2="${mid}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <polyline points="${pts}" fill="none" stroke="${color||'var(--purple)'}" stroke-width="1.8"/></svg>`;
+}
+function nbars(obj){
+  const ks=Object.keys(obj||{}); if(!ks.length)return '<div class="mut" style="font-size:10px">—</div>';
+  const mx=Math.max(...ks.map(k=>Math.abs(obj[k])))||1;
+  return ks.sort((a,b)=>Math.abs(obj[b])-Math.abs(obj[a])).map(k=>
+    `<div class="barrow"><span class="bn">${k}</span><span class="bartrk"><span class="barfl" style="width:${(Math.abs(obj[k])/mx*100).toFixed(0)}%"></span></span><span class="barval">${(obj[k]*100).toFixed(0)}%</span></div>`).join('');
+}
+function calRel(cal){
+  const r=(cal&&cal.reliability)||[]; if(!r.length)return '';
+  const bars=r.map(b=>{
+    const ph=Math.round(b.pred*54), ah=Math.round(b.actual*54);
+    return `<div class="rb" title="bin ${b.bin}: pred ${b.pred}, actual ${b.actual}, n=${b.n}">
+      <i style="height:${ph}px;background:var(--blue)"></i><i style="height:${ah}px;background:var(--green)"></i></div>`;}).join('');
+  return `<div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Calibration · <span style="color:var(--blue)">pred</span> vs <span style="color:var(--green)">actual</span></div><div class="relbar">${bars}</div>`;
+}
+function fanChart(term){
+  if(!term||!term.length) return '';
+  const w=300,h=126,pad=24;
+  const xs=term.map((t,i)=>pad+i/(term.length-1||1)*(w-2*pad));
+  const all=term.flatMap(t=>[t.p10,t.p90,t.expected_move_pct]).concat([0]);
+  const mn=Math.min(...all),mx=Math.max(...all),rng=(mx-mn)||1;
+  const Y=v=>h-pad-((v-mn)/rng)*(h-2*pad);
+  const top=term.map((t,i)=>`${xs[i].toFixed(1)},${Y(t.p90).toFixed(1)}`);
+  const bot=term.map((t,i)=>`${xs[i].toFixed(1)},${Y(t.p10).toFixed(1)}`).reverse();
+  const mid=term.map((t,i)=>`${xs[i].toFixed(1)},${Y(t.expected_move_pct).toFixed(1)}`).join(' ');
+  const zero=Y(0);
+  const dots=term.map((t,i)=>`<circle cx="${xs[i].toFixed(1)}" cy="${Y(t.expected_move_pct).toFixed(1)}" r="2.6" fill="var(--purple)"/><text x="${xs[i].toFixed(1)}" y="${(Y(t.expected_move_pct)-6).toFixed(1)}" fill="var(--txt)" font-size="9" text-anchor="middle">${t.expected_move_pct>=0?'+':''}${t.expected_move_pct}%</text>`).join('');
+  const labels=term.map((t,i)=>`<text x="${xs[i].toFixed(1)}" y="${h-6}" fill="var(--muted)" font-size="9" text-anchor="middle">${t.horizon}d</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:132px">
+    <line x1="${pad}" x2="${w-pad}" y1="${zero}" y2="${zero}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <polygon points="${top.concat(bot).join(' ')}" fill="rgba(160,107,255,.16)"/>
+    <polyline points="${mid}" fill="none" stroke="var(--purple)" stroke-width="2"/>${dots}${labels}</svg>`;
+}
+function meshNetwork(g){
+  const nodes=g.nodes||[],edges=g.edges||[]; if(!nodes.length)return '';
+  const w=300,h=210,cx=w/2,cy=h/2,R=80;
+  const cols={brain:'#36e2ff',tnet:'#a06bff',prediction:'#f0b90b',ml:'#16c784',news:'#3b82f6',backprop:'#ff7ac6',alerts:'#ea3943',autonomy:'#a06bff',reasoning:'#36e2ff',shadow:'#8b97a7',edge:'#16c784',attribution:'#f0b90b'};
+  const pos={},N=nodes.length;
+  nodes.forEach((n,i)=>{const a=-Math.PI/2+i/N*2*Math.PI; pos[n.layer]=[cx+R*Math.cos(a),cy+R*Math.sin(a)];});
+  const useInf=nodes.some(n=>n.influence!=null);
+  const mxc=Math.max(...nodes.map(n=>useInf?(n.influence||0):n.count))||1;
+  const el=edges.map(e=>{const a=pos[e.a],b=pos[e.b]; if(!a||!b)return''; const att=e.attention!=null?e.attention:0.5;
+    const sw=(0.6+att*3.2).toFixed(1); const op=e.pruned?0.07:(0.18+att*0.55).toFixed(2);
+    // symbol/both edges = cyan (hard evidence); temporal-only = amber (co-activation)
+    const col=e.pruned?'rgba(139,151,167,.5)':(e.kind==='temporal'?'rgba(240,185,11,.85)':'rgba(54,226,255,.9)');
+    const dash=e.pruned?' stroke-dasharray="2 3"':(e.kind==='temporal'?' stroke-dasharray="5 4"':'');
+    return `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${col}" stroke-width="${sw}" stroke-opacity="${op}"${dash}><title>${e.a}↔${e.b} · ${e.kind} · att ${e.attention}</title></line>`;}).join('');
+  const nl=nodes.map(n=>{const p=pos[n.layer],c=cols[n.layer]||'#5b6675';const v=useInf?(n.influence||0):n.count;const r=(5+v/mxc*10).toFixed(1);
+    const glow=useInf&&n.influence>=0.6?`filter="drop-shadow(0 0 5px ${c})"`:'';
+    return `<g><circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${r}" fill="${c}" opacity=".92" ${glow}><title>${n.layer}: ${n.count} insights${useInf?', influence '+n.influence+', degree '+(n.degree||0):''}</title></circle>
+      <text x="${p[0].toFixed(1)}" y="${(p[1]-(+r)-3).toFixed(1)}" fill="var(--muted)" font-size="8.5" text-anchor="middle">${n.layer}</text></g>`;}).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:210px">${el}${nl}</svg>`;
+}
+async function loadCortexNeural(){
+  const el=$('#cxpanel'); if(!el)return;
+  const d=await J('/api/cortex'); if(!d){el.innerHTML='<div class="empty">no data</div>';return;}
+  const c=d.card||{},cal=d.calibration||{},H=d.history||[];
+  const st=$('#cxstate'); if(st)st.innerHTML=d.enabled?'<span class="chip2 on">LIVE</span>':'<span class="chip2 off">SHADOW</span>';
+  if(!c.trained){el.innerHTML='<div class="nbody"><div class="empty">cortex not trained yet — trains on resolved decisions</div></div>';return;}
+  const hist=H.map(x=>x.p_up).filter(v=>v!=null);
+  const last=H.slice(-1)[0]||{};
+  const confs=H.map(x=>x.confidence).filter(v=>v!=null);
+  const meanConf=confs.length?(confs.reduce((a,b)=>a+b,0)/confs.length):null;
+  el.innerHTML=`<div class="nbody">
+    <div class="statline">
+      <div class="s"><b>${c.val_acc!=null?(c.val_acc*100).toFixed(0)+'%':'—'}</b><span>val acc</span></div>
+      <div class="s"><b>${cal.accuracy!=null?(cal.accuracy*100).toFixed(0)+'%':'—'}</b><span>calib acc</span></div>
+      <div class="s"><b>${cal.brier!=null?cal.brier:'—'}</b><span>brier</span></div>
+      <div class="s"><b>${last.conviction!=null?((last.conviction>=0?'+':'')+last.conviction):'—'}</b><span>last conv</span></div>
+      <div class="s"><b>${meanConf!=null?(meanConf*100).toFixed(0)+'%':'—'}</b><span>avg conf</span></div>
+      <div class="s"><b>${c.members||'—'}</b><span>ensemble</span></div>
+    </div>
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px">P(up) history · ${hist.length} pts</div>
+    ${sparkSVG(hist,'var(--purple)')}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:8px">Voice saliency (last)</div>
+    ${nbars(last.saliency||{})}
+    ${calRel(cal)}</div>`;
+}
+async function loadTnetPanel(){
+  const el=$('#tnetpanel'); if(!el)return;
+  const [f,a,sc]=await Promise.all([J('/api/tnet/forecast?symbol='+NEURALSYM),J('/api/tnet/accuracy'),J('/api/tnet/scan')]);
+  if(!f){el.innerHTML='<div class="empty">no data</div>';return;}
+  if(f.error){el.innerHTML='<div class="nbody"><div class="empty">'+f.error+'</div></div>';return;}
+  const ts=fanChart(f.term_structure||[]);
+  const dom=(f.drivers&&f.drivers.dominant)?`<div class="mut" style="font-size:10px;margin-top:6px">dominant driver · <b style="color:var(--blue)">${f.drivers.dominant}</b></div>`:'';
+  const movers=((sc&&sc.ranked)||[]).slice(0,5).map(m=>{const c=m.direction==='up'?'var(--green)':m.direction==='down'?'var(--red)':'var(--dim)';
+    return `<div class="barrow"><span class="bn" style="width:50px">${m.symbol}</span><span class="bartrk"><span class="barfl" style="width:${Math.min(100,m.strength*180).toFixed(0)}%;background:${c}"></span></span><span class="barval" style="color:${c}">${(m.prob_up*100).toFixed(0)}%</span></div>`;}).join('');
+  const acc=(a&&a.accuracy)||{}; const buckets=(acc.buckets||[]).map(b=>`<div class="barrow"><span class="bn">${b.bucket}</span><span class="bartrk"><span class="barfl" style="width:${(b.hit_rate*100).toFixed(0)}%;background:${b.hit_rate>=0.5?'var(--green)':'var(--red)'}"></span></span><span class="barval">${(b.hit_rate*100).toFixed(0)}%</span></div>`).join('')||'<div class="mut" style="font-size:10px">no matured forecasts yet</div>';
+  el.innerHTML=`<div class="nbody">
+    <div class="statline">
+      <div class="s"><b class="${f.direction==='up'?'pos':f.direction==='down'?'neg':''}">${f.direction.toUpperCase()}</b><span>${f.symbol}</span></div>
+      <div class="s"><b>${(f.prob_up*100).toFixed(0)}%</b><span>P(up)</span></div>
+      <div class="s"><b>${(f.confidence*100).toFixed(0)}%</b><span>conf</span></div>
+      <div class="s"><b>${f.ensemble_stability!=null?(f.ensemble_stability*100).toFixed(0)+'%':'—'}</b><span>stability</span></div>
+      <div class="s"><b>${f.calibrated?'✓':'~'}</b><span>${f.band_method}</span></div>
+    </div>
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px">Term structure · p10–p90 cone</div>
+    ${ts}${dom}
+    ${movers?`<div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Universe scan · top conviction</div>${movers}`:''}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Forecast hit-rate by maturity ${acc.n?'· n='+acc.n:''}</div>
+    ${buckets}</div>`;
+}
+async function loadReasoning(){
+  const el=$('#rsnpanel'); if(!el)return;
+  const d=await J('/api/reasoning?limit=40'+(RSNGATE?'&gated=1':'')); if(!d){el.innerHTML='<div class="empty">no data</div>';return;}
+  const s=d.stats||{}; const st=$('#rsnstats'); if(st)st.textContent=`${s.total||0} decisions · ${s.gated||0} gated · ${((s.pass_rate||0)*100).toFixed(0)}% pass`;
+  const lb=(d.leaderboard||[]).slice(0,5).map(v=>`<span class="chip2" title="avg contrib ${v.avg_contrib}">${v.voice} ·${v.top_count}</span>`).join(' ');
+  const ch=(s.conviction_hist||[]); const mxh=Math.max(1,...ch.map(b=>b.n));
+  const dist=ch.length?`<div style="display:flex;gap:5px;align-items:flex-end;height:34px;margin-top:6px">`+ch.map(b=>`<div style="flex:1;text-align:center" title="${b.bucket}: ${b.n}"><div style="height:${Math.round(b.n/mxh*26)}px;background:linear-gradient(180deg,var(--blue),var(--purple));border-radius:2px 2px 0 0"></div><div class="mut" style="font-size:8px;margin-top:2px">${b.bucket}</div></div>`).join('')+`</div>`:'';
+  const ds=(d.decisions||[]);
+  if(!ds.length){el.innerHTML='<div class="nbody"><div class="empty">no decisions logged yet</div></div>';return;}
+  const rows=ds.map(x=>{
+    const col=x.composite>0?'var(--green)':x.composite<0?'var(--red)':'var(--dim)';
+    const parts=Object.entries(x.scores||{}).map(([k,v])=>`${k} ${v>=0?'+':''}${v}`).join(' · ');
+    return `<div class="row"><span class="swatch sm" style="background:${col};box-shadow:0 0 6px ${col}"></span>
+      <span class="tag neutral" style="width:54px;text-align:center">${x.symbol}</span>
+      <span style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b style="color:${col}">${x.side.toUpperCase()} ${x.composite>=0?'+':''}${x.composite}</b> <span class="mut">${parts}</span></div>
+      <div class="mut" style="font-size:10px">${x.regime} · agree ${x.agree}/${x.n} · ${x.gate?'<span style="color:var(--green)">PASS</span>':'BLOCK'}</div></span></div>`;}).join('');
+  el.innerHTML=`<div style="padding:8px 13px;border-bottom:1px solid var(--line)"><span class="mut" style="font-size:10px">TOP VOICES&nbsp;</span>${lb}
+    <div class="mut" style="font-size:9px;margin-top:6px">CONVICTION DISTRIBUTION · ${s.buys||0} buy / ${s.sells||0} sell</div>${dist}</div>
+    <div class="scroll" style="max-height:392px">${rows}</div>`;
+}
+async function loadMeshGraph(){
+  const el=$('#meshgpanel'); if(!el)return;
+  const g=await J('/api/mesh/graph'); if(!g){el.innerHTML='<div class="empty">no data</div>';return;}
+  const m=g.metrics||{};
+  if(!g.nodes||!g.nodes.length){el.innerHTML='<div class="nbody"><div class="empty">mesh quiet — no insights in window</div></div>';return;}
+  const useInf=g.nodes.some(n=>n.influence!=null);
+  const mxc=Math.max(...g.nodes.map(n=>useInf?(n.influence||0):n.count))||1;
+  const cols={brain:'#36e2ff',tnet:'var(--purple)',prediction:'var(--amber)',ml:'var(--green)',news:'var(--blue)',backprop:'#ff7ac6',alerts:'var(--red)',reasoning:'#36e2ff',cortex:'var(--purple)'};
+  const nodes=g.nodes.map(n=>{const c=cols[n.layer]||'var(--dim)';const v=useInf?(n.influence||0):n.count;
+    return `<div class="meshnode"><span class="mn" style="color:${c}">${n.layer}</span>
+      <span class="bartrk"><span class="barfl" style="width:${(v/mxc*100).toFixed(0)}%;background:${c}"></span></span>
+      <span class="barval" title="influence">${useInf?(n.influence).toFixed(2):n.count}</span><span class="mut" style="width:42px;text-align:right;font-size:10px" title="degree · avg salience">${useInf?'d'+(n.degree||0):''} ${(n.avg_salience*100).toFixed(0)}%</span></div>`;}).join('');
+  const edges=(g.edges||[]).slice(0,6).map(e=>`<span class="chip2" title="${e.weight} shared symbols">${e.a}↔${e.b} ·${e.weight}</span>`).join(' ')||'<span class="mut" style="font-size:10px">no co-mentions</span>';
+  const syms=(m.top_symbols||[]).slice(0,6).map(s=>`<span class="chip2">${s.symbol} ·${s.n}</span>`).join(' ');
+  const sal=m.salience||{};
+  el.innerHTML=`<div class="nbody">
+    <div class="statline">
+      <div class="s"><b>${m.total||0}</b><span>insights</span></div>
+      <div class="s"><b>${m.layers||0}</b><span>layers</span></div>
+      <div class="s"><b style="color:var(--green)">${sal.high||0}</b><span>high sal</span></div>
+      <div class="s"><b>${(g.edges||[]).length}</b><span>links</span></div>
+      <div class="s"><b style="color:var(--amber)">${m.temporal_edges||0}</b><span>temporal</span></div>
+      <div class="s"><b style="color:var(--dim)">${m.pruned_edges||0}</b><span>pruned</span></div>
+    </div>
+    ${meshNetwork(g)}
+    ${(m.decay_24h&&m.decay_24h.length)?`<div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:6px">Insight flow · last 24h</div>${sparkSVG(m.decay_24h.slice().reverse().map(d=>d.n),'#36e2ff')}`:''}
+    ${nodes}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Cross-layer links</div><div style="margin-top:5px">${edges}</div>
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Most-discussed</div><div style="margin-top:5px">${syms||'<span class="mut" style="font-size:10px">—</span>'}</div>
+  </div>`;
+}
+async function meshSearch(){
+  const q=(document.getElementById('meshq')||{}).value||''; const out=$('#meshsearchres'); if(!out)return;
+  if(!q.trim()){out.innerHTML='';return;}
+  const d=await J('/api/mesh/search?q='+encodeURIComponent(q)+'&limit=12');
+  const rs=(d&&d.results)||[];
+  out.innerHTML=rs.length?rs.map(r=>`<div class="row"><span class="tag neutral" style="width:64px;text-align:center">${r.layer}</span>
+    <span style="flex:1;min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.text}</span>
+    <span class="barval">${r.score}</span></div>`).join(''):'<div class="mut" style="font-size:10px">no matches</div>';
+}
+async function meshDigest(){
+  const d=await J('/api/mesh/digest'); if(!d)return;
+  toast('Mesh digest written to data/digests/mesh_latest.md','ok','Digest');
+  const w=window.open('','_blank'); if(w){w.document.write('<pre style="white-space:pre-wrap;font-family:monospace;padding:20px;background:#0b0f16;color:#dbe7f2">'+(d.markdown||'').replace(/</g,'&lt;')+'</pre>');}
+}
+async function loadMeshIntel(){
+  const el=$('#meshintel'); if(!el)return;
+  const [d,corr]=await Promise.all([J('/api/mesh/intel'),J('/api/mesh/correlation')]);
+  if(!d){el.innerHTML='<div class="empty">no data</div>';return;}
+  const dirCol=x=>x==='up'?'var(--green)':x==='down'?'var(--red)':'var(--dim)';
+  const cons=(d.consensus||[]).map(c=>`<div class="barrow"><span class="bn" style="width:56px">${c.symbol}</span>
+    <span style="flex:1;font-size:10px;color:${dirCol(c.direction)}">${c.direction.toUpperCase()} · ${c.agree}/${c.layers.length} layers · net ${c.net>=0?'+':''}${c.net}</span></div>`).join('')
+    || '<div class="mut" style="font-size:10px">no multi-layer consensus yet</div>';
+  const inbox=(d.inbox||[]).slice(0,6).map(i=>{const c={brain:'#36e2ff',tnet:'#a06bff',ml:'#16c784',news:'#3b82f6',reasoning:'#36e2ff',autonomy:'#a06bff',prediction:'#f0b90b',alerts:'#ea3943'}[i.layer]||'#5b6675';
+    return `<div class="row"><span class="swatch sm" style="background:${c};box-shadow:0 0 6px ${c}"></span>
+      <span class="tag neutral" style="width:64px;text-align:center">${i.layer}</span>
+      <span style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${i.text||''}</div></span>
+      <span class="barval" title="priority">${i.priority}</span></div>`;}).join('')
+    || '<div class="mut" style="font-size:10px">inbox empty</div>';
+  const themes=(d.themes||[]).slice(0,10).map(t=>`<span class="chip2" title="${(t.layers||[]).join(', ')}">${t.term} ·${t.count}</span>`).join(' ')
+    || '<span class="mut" style="font-size:10px">no themes</span>';
+  const anoms=(d.anomalies||[]).map(a=>{const col=a.severity==='warn'?'var(--amber)':'var(--blue)';
+    return `<div class="row"><span class="swatch sm" style="background:${col}"></span><span class="tag neutral" style="width:96px;text-align:center;color:${col}">${a.kind}</span><span style="flex:1;font-size:11px">${a.text}</span></div>`;}).join('')
+    || '<div class="mut" style="font-size:10px">no anomalies — mesh nominal</div>';
+  const ic=d.inbox_counts||{};
+  const h=d.health||{}; const gcol={A:'var(--green)',B:'var(--green)',C:'var(--amber)',D:'var(--amber)',F:'var(--red)'}[h.grade]||'var(--dim)';
+  const health=h.score!=null?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+    <div style="font-size:26px;font-weight:800;color:${gcol};font-variant-numeric:tabular-nums">${h.score}<span style="font-size:13px">/100</span></div>
+    <div style="font-size:20px;font-weight:800;color:${gcol}">${h.grade}</div>
+    <span class="mut" style="font-size:10px;flex:1">activity ${h.components.activity} · diversity ${h.components.diversity} · sla ${h.components.sla} · anomaly ${h.components.anomaly}</span></div>`:'';
+  const clus=((d.clusters)||[]).slice(0,4).map(c=>`<span class="chip2" title="strength ${c.strength}">${(c.symbols||[]).join(' · ')}</span>`).join(' ')||'<span class="mut" style="font-size:10px">no clusters</span>';
+  const nl=d.next_layer&&d.next_layer.from?`<span class="chip2"><b style="color:var(--purple)">${d.next_layer.from}</b> → ${d.next_layer.to} (${Math.round((d.next_layer.prob||0)*100)}%)</span>`:'';
+  const lead=((corr&&corr.pairs)||[]).slice(0,6).map(p=>`<div class="barrow"><span style="flex:1;font-size:11px"><b style="color:var(--purple)">${p.lead}</b> → ${p.follow}</span><span class="mut" style="font-size:10px">${p.count}× · ${Math.round(p.avg_gap_min)}m</span></div>`).join('')
+    || '<div class="mut" style="font-size:10px">no lead/lag pattern yet</div>';
+  const narr=d.narrative?`<div style="font-size:12px;line-height:1.5;color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:10px">${d.narrative}</div>`:'';
+  const sla=(d.sla_overdue||[]).map(s=>{const col=s.status==='stale'?'var(--red)':'var(--amber)';
+    return `<span class="chip2" style="color:${col}" title="${Math.round(s.last_seen_min)}m since last">${s.layer} ${s.status}</span>`;}).join(' ');
+  el.innerHTML=`<div class="nbody">
+    ${health}
+    ${narr}
+    ${sla?`<div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px">Layer SLA · overdue</div><div style="margin:5px 0 10px">${sla}</div>`:''}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px">Cross-layer consensus</div>${cons}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Priority inbox ${ic.total!=null?'· '+ic.high+'/'+ic.total+' high':''}</div>${inbox}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Themes</div><div style="margin-top:5px">${themes}</div>
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Anomalies</div>${anoms}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Symbol clusters</div><div style="margin:5px 0">${clus}</div>
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Lead → Follow (who fires first) ${nl?'· next: '+nl:''}</div>${lead}
+    <div class="mut" style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;margin-top:10px">Search mesh
+      <button onclick="meshDigest()" style="float:right;font-size:10px;padding:2px 8px">📄 Digest</button></div>
+    <div style="display:flex;gap:6px;margin:5px 0">
+      <input id="meshq" placeholder="search insights…" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:5px;padding:4px 8px;font-size:11px" onkeydown="if(event.key==='Enter')meshSearch()">
+      <button onclick="meshSearch()" style="font-size:10px;padding:2px 9px">⌕</button>
+    </div>
+    <div id="meshsearchres"></div>
+  </div>`;
+}
+async function loadNeural(){ await Promise.all([loadCortexNeural(),loadTnetPanel(),loadReasoning(),loadMeshGraph(),loadMeshIntel()]); }
+(function(){const i=document.getElementById('tnetsym'); if(i)i.addEventListener('keydown',e=>{if(e.key==='Enter'){NEURALSYM=e.target.value.trim().toUpperCase()||'SPY';loadTnetPanel();}});})();
+
+let NEWSCAT='', NEWSQ='';
+async function loadNews(){
+  const el=$('#newsfeed'); if(!el)return;
+  const d=await J('/api/newshub?limit=120'+(NEWSCAT?'&category='+NEWSCAT:'')+(NEWSQ?'&q='+encodeURIComponent(NEWSQ):''));
+  if(!d){el.innerHTML='<div class="empty">no data</div>';return;}
+  const ms=d.market_sentiment||{}; const cc=d.counts||{};
+  const sentEl=$('#newssent'); if(sentEl){ const col=ms.net>0.05?'var(--green)':ms.net<-0.05?'var(--red)':'var(--muted)';
+    sentEl.innerHTML=`market sentiment <b style="color:${col}">${ms.net>=0?'+':''}${ms.net}</b> (${ms.label}) · ${Object.entries(cc).map(([k,v])=>k+' '+v).join(' · ')}`; }
+  const its=(d.items||[]).filter(i=>!NEWSCAT||i.category===NEWSCAT);
+  if(!its.length){el.innerHTML='<div class="empty">no headlines match</div>';return;}
+  el.innerHTML='<div class="scroll" style="max-height:560px">'+its.map(i=>{
+    const col=i.sentiment>0.05?'var(--green)':i.sentiment<-0.05?'var(--red)':'var(--dim)';
+    const link=i.link?`onclick="window.open('${i.link.replace(/'/g,"")}','_blank')" style="cursor:pointer"`:'';
+    const syms=(i.symbols||[]).map(s=>`<span class="tag neutral" style="margin-left:4px">${s}</span>`).join('');
+    return `<div class="row" ${link}><span class="swatch sm" style="background:${col};box-shadow:0 0 6px ${col}"></span>
+      <span class="tag neutral" style="width:64px;text-align:center">${i.category}</span>
+      <span style="flex:1;min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${i.title}${syms}</div>
+        <div class="mut" style="font-size:10px">${i.source}</div></span>
+      <span class="num" style="color:${col};width:48px;text-align:right">${i.sentiment>=0?'+':''}${i.sentiment}</span></div>`;
+  }).join('')+'</div>';
+}
+
+/* ---------- signal scorecard ---------- */
+async function loadSigScore(){
+  const d=await J('/api/signal_scorecard'); const el=$('#sigscore'); const rows=(d&&d.by_source)||[];
+  if(!rows.length){el.innerHTML='<div class="empty">no signals yet</div>';return;}
+  el.innerHTML='<div class="row" style="color:var(--muted);font-size:10px;text-transform:uppercase"><span style="width:110px">source</span><span style="width:70px">signals</span><span style="width:70px">resolved</span><span style="width:80px">hit-rate</span><span>fwd edge</span></div>'+
+    rows.map(r=>{const hr=r.hit_rate==null?'—':(r.hit_rate*100).toFixed(0)+'%';
+      const ed=r.avg_dir_return_pct==null?'—':((r.avg_dir_return_pct>=0?'+':'')+r.avg_dir_return_pct.toFixed(2)+'%');
+      const col=r.avg_dir_return_pct==null?'var(--muted)':(r.avg_dir_return_pct>=0?'var(--green)':'var(--red)');
+      return `<div class="row"><span class="sym" style="width:110px">${r.source}</span>
+        <span class="num" style="width:70px">${r.signals}</span>
+        <span class="num mut" style="width:70px">${r.resolved}</span>
+        <span class="num" style="width:80px">${hr}</span>
+        <span class="num" style="color:${col}">${ed}</span></div>`;}).join('');
+}
+
+/* ---------- prediction engine ---------- */
+async function loadPredictions(){
+  const d=await J('/api/predictions'); if(!d)return; const st=d.stats||{};
+  $('#predmeta').textContent=`${st.watching||0} watching · ${st.correct||0}✓ / ${st.incorrect||0}✗ · ${st.buckets||0} matrix buckets`;
+  const w=d.watching||[];
+  $('#predplans').innerHTML='<div class="mut" style="font-size:10px;padding:6px 13px;border-bottom:1px solid var(--line)">ACTIVE WATCHED PLANS (ranked)</div>'+
+    (w.length?w.map(p=>{const col=p.direction==='up'?'var(--green)':'var(--red)';
+      return `<div class="row" style="display:block;padding:7px 13px">
+        <span class="sym" style="cursor:pointer" onclick="PXSYM='${p.symbol}';$('#symin').value='${p.symbol}';loadPrice()">${p.symbol}</span>
+        <span class="tag" style="background:${col}22;color:${col}">${p.direction} ${Math.round(p.magnitude_pct)}%/${p.horizon_days}d</span>
+        <span class="num mut" style="float:right">rank ${(p.rank_score||0).toFixed(2)}</span>
+        <div class="meta" style="margin-top:2px">${(p.rationale||'').slice(0,70)} <span class="mut">[${p.source}]</span></div></div>`;}).join(''):'<div class="empty">no active predictions</div>');
+  const m=(await J('/api/decision_matrix'))||{matrix:[]};
+  $('#predmatrix').innerHTML='<div class="mut" style="font-size:10px;padding:6px 13px;border-bottom:1px solid var(--line)">DECISION MATRIX (learned hit-rate)</div>'+
+    ((m.matrix||[]).length?m.matrix.map(b=>`<div class="row" style="padding:6px 13px">
+       <span style="font-size:11px">${b.key}</span>
+       <span class="num">${(b.hit_rate*100).toFixed(0)}% <span class="mut">n=${b.n}</span></span></div>`).join('')
+     :'<div class="empty">matrix builds as predictions resolve</div>');
+}
+
+/* ---------- insight mesh ---------- */
+const MLAYER={brain:'var(--blue)',prediction:'var(--purple)',ml:'var(--amber)',council:'var(--green)',agent:'var(--muted)',signal:'var(--muted)'};
+async function loadMesh(){
+  const d=await J('/api/mesh'); const el=$('#meshfeed'); const ins=(d&&d.insights)||[];
+  if(!ins.length){el.innerHTML='<div class="empty">mesh quiet — populates each cycle</div>';return;}
+  el.innerHTML=ins.map(i=>{const c=MLAYER[i.layer]||'var(--muted)';
+    return `<div class="row" style="display:block;padding:7px 13px">
+      <span class="num" style="color:var(--dim);font-size:10px">${(i.ts||'').slice(11,16)}</span>
+      <span class="tag" style="background:${c}22;color:${c};margin:0 6px">${i.layer}</span>
+      ${i.symbol?('<b>'+i.symbol+'</b> '):''}<span class="meta">${(i.text||'').slice(0,150)}</span></div>`;}).join('');
+}
+
+/* ---------- council chat ---------- */
+let CHAT=[];
+function quickAsk(t){const i=document.getElementById('chatq');i.value=t;councilSend();}
+function esc(t){return (t||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function renderChat(scroll){
+  const el=$('#chatlog'); if(!el)return;
+  if(!CHAT.length){el.innerHTML='<div class="empty">Ask your council a question — e.g. "Is NVDA a buy here?" or "What\'s the risk in this regime?"</div>';return;}
+  el.innerHTML=CHAT.map(m=>{
+    if(m.role==='user')return `<div style="padding:7px 13px;text-align:right"><span style="background:var(--blue);color:#fff;padding:7px 12px;border-radius:12px 12px 2px 12px;display:inline-block;max-width:82%;text-align:left">${esc(m.text)}</span></div>`;
+    if(m.role==='thinking')return `<div class="mut" style="padding:8px 13px">⋯ ${esc(m.text)}</div>`;
+    if(m.role==='error')return `<div class="neg" style="padding:8px 13px">⚠ ${esc(m.text)}</div>`;
+    const mem=(m.members||[]).map(x=>`<details style="margin:3px 0"><summary style="cursor:pointer;color:var(--muted);font-size:11px">${x.source}${x.ok===false?' · failed':''}</summary><div class="meta" style="padding:4px 0 4px 12px;white-space:pre-wrap">${esc((x.text||'').slice(0,900))}</div></details>`).join('');
+    return `<div style="padding:7px 13px"><div style="background:var(--panel2);border:1px solid var(--line);padding:11px 13px;border-radius:12px 12px 12px 2px;max-width:90%">
+      <div style="font-weight:700;margin-bottom:5px">⚖ Council <span class="mut" style="font-size:10px">chair: ${m.chair||'—'} · ${(m.members||[]).length} voices</span></div>
+      <div style="white-space:pre-wrap;line-height:1.5">${esc(m.final||'')}</div>
+      ${(m.grounding&&m.grounding.length)?('<div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap">'+m.grounding.map(g=>'<span class=\'tag\' style=\'background:#1c2531;color:var(--muted);font-size:9px\'>'+g+'</span>').join('')+'</div>'):''}
+      <div style="margin-top:9px">${mem||''}</div></div></div>`;
+  }).join('');
+  if(scroll){el.scrollTop=el.scrollHeight;}
+}
+async function councilSend(){
+  const qi=$('#chatq'); const q=(qi.value||'').trim(); if(!q)return;
+  const sym=($('#chatsym').value||'').trim().toUpperCase();
+  CHAT.push({role:'user',text:q}); qi.value='';
+  CHAT.push({role:'thinking',text:'council deliberating across models…'}); renderChat(true);
+  $('#chatsend').disabled=true;
+  try{
+    const r=await fetch('/api/council/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,symbol:sym})});
+    const d=await r.json(); CHAT.pop();
+    if(d.error){CHAT.push({role:'error',text:d.error});}
+    else CHAT.push({role:'council',final:d.final||'(no synthesis)',members:d.members||[],chair:d.chair,grounding:d.grounding||[]});
+  }catch(e){CHAT.pop();CHAT.push({role:'error',text:String(e)});}
+  $('#chatsend').disabled=false; renderChat(true);
+}
+
+/* ---------- tabs + system status ---------- */
+const SECMAP=['overview','overview','flow','agents','intel','intel','intel','intel','council'];
+function setupTabs(){
+  const w=document.querySelector('.wrap'); if(!w)return;
+  [...w.children].forEach((el,i)=>{ if(!el.dataset.sec) el.dataset.sec = SECMAP[i] || 'intel'; });
+  showTab(localStorage.getItem('tab')||'overview');
+}
+function showTab(t){
+  document.querySelectorAll('#tabnav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  const w=document.querySelector('.wrap'); if(!w)return;
+  [...w.children].forEach(el=>{ el.style.display=(t==='all'||el.dataset.sec===t)?'':'none'; });
+  try{localStorage.setItem('tab',t);}catch(e){}
+  try{window.scrollTo({top:0,behavior:'smooth'});}catch(e){}
+}
+async function loadHealthFull(){
+  const h=await J('/api/health/full'); if(!h)return;
+  const sv=h.services||{}; const up=Object.values(sv).filter(Boolean).length, tot=Object.keys(sv).length;
+  const ltm=h.ltm_online; const pw=(h.predictions||{}).watching||0;
+  $('#sysstat').innerHTML=
+    `<span class="schip" style="color:${up===tot&&tot?'var(--green)':'var(--amber)'}">${up}/${tot||'–'} svc</span>`+
+    `<span class="schip" style="color:${ltm?'var(--green)':'var(--dim)'}">${ltm?'●':'○'} LTM</span>`+
+    `<span class="schip" style="color:var(--purple)">${pw} preds</span>`+
+    `<span class="schip">${h.mesh_insights||0} mesh</span>`+
+    `<span class="schip">${h.signals||0} sigs</span>`;
+}
+
+/* ---------- ticker tape ---------- */
+async function loadTape(){
+  const b=await J('/api/marketbrain'); const a=await J('/api/analytics'); const el=$('#tape'); if(!b)return;
+  const items=[['REGIME',(b.regime||'').replace('_',' '),b.regime==='risk_on'?1:b.regime==='risk_off'||b.regime==='high_vol'?-1:0],
+    ['SPY',trendWord(b.spy_trend),b.spy_trend],['QQQ',trendWord(b.qqq_trend),b.qqq_trend],
+    ['BTC',trendWord(b.btc_trend),b.btc_trend],['GLD',trendWord(b.gld_trend),b.gld_trend],
+    ['VOL',(b.spy_vol_ann||0).toFixed(1)+'%',-1],['BREADTH',Math.round((b.breadth||0)*100)+'%',b.breadth>0.5?1:-1],
+    ['RET',fmtPct(a?.total_return_pct),a?.total_return_pct>=0?1:-1]];
+  el.innerHTML=items.map(t=>`<div class="ti"><b>${t[0]}</b>
+    <span class="${t[2]>0?'pos':t[2]<0?'neg':'mut'}">${t[1]}</span></div>`).join('');
+}
+
+/* ---------- wiring ---------- */
+$('#postabs').addEventListener('click',e=>{if(e.target.dataset.t){
+  [...e.target.parentElement.children].forEach(b=>b.classList.remove('on'));e.target.classList.add('on');
+  window._postab=e.target.dataset.t; loadAccount();}});
+$('#eqseg').addEventListener('click',e=>{if(e.target.dataset.r){
+  [...e.target.parentElement.children].forEach(b=>b.classList.remove('on'));e.target.classList.add('on');
+  EQRANGE=e.target.dataset.r; loadEquity();}});
+$('#pxseg').addEventListener('click',e=>{if(e.target.dataset.n){
+  [...e.target.parentElement.children].forEach(b=>b.classList.remove('on'));e.target.classList.add('on');
+  PXN=parseInt(e.target.dataset.n); loadPrice();}});
+$('#symin').addEventListener('keydown',e=>{if(e.key==='Enter'){PXSYM=e.target.value.trim().toUpperCase()||'AAPL';loadPrice();}});
+
+/* ---------- Day Trader tab ---------- */
+let DTSYM='SPY';
+function bandBar(lo,mid,hi){
+  lo=(lo==null?-1:lo); mid=(mid==null?0:mid); hi=(hi==null?1:hi);
+  const min=Math.min(lo,mid,hi,-0.01), max=Math.max(lo,mid,hi,0.01);
+  const X=v=>((v-min)/(max-min))*100, zx=X(0);
+  return `<svg width="100%" height="26" viewBox="0 0 100 26" preserveAspectRatio="none">
+    <line x1="${zx}" y1="2" x2="${zx}" y2="24" stroke="#3a4759" stroke-width="0.6"/>
+    <rect x="${X(lo)}" y="9" width="${Math.max(0.6,X(hi)-X(lo))}" height="8" rx="2" fill="rgba(59,130,246,.35)"/>
+    <circle cx="${X(mid)}" cy="13" r="2.6" fill="${mid>=0?'#16c784':'#ea3943'}"/></svg>`;
+}
+async function dtForecast(){
+  const el=$('#dt_forecast'); if(!el)return;
+  const fc=await J('/api/tnet/forecast?symbol='+encodeURIComponent(DTSYM));
+  if(!fc||fc.error){el.innerHTML='<div class="empty">'+((fc&&fc.error)||'no data')+'</div>';return;}
+  const up=fc.direction==='up';
+  const drivers=(fc.drivers&&fc.drivers.weights)||{};
+  const dbars=Object.entries(drivers).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>
+    `<div style="margin:5px 0"><div style="display:flex;justify-content:space-between;font-size:11px"><span class="mut">${k}</span><span class="num">${(v*100).toFixed(0)}%</span></div><div class="bar"><i style="width:${(v*100).toFixed(0)}%;background:var(--purple)"></i></div></div>`).join('')
+    ||'<div class="mut" style="font-size:11px">no dominant driver</div>';
+  const q=fc.quantiles_pct||{};
+  el.innerHTML=`<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+     <div style="text-align:center">${donut(Math.round(fc.prob_up*100),up?'var(--green)':'var(--red)',Math.round(fc.prob_up*100)+'%')}<div class="mut" style="font-size:10px;margin-top:3px">P(UP)</div></div>
+     <div style="text-align:center">${donut(Math.round(fc.confidence*100),'var(--blue)',Math.round(fc.confidence*100)+'%')}<div class="mut" style="font-size:10px;margin-top:3px">CONF</div></div>
+     <div><div><span class="tag ${up?'long':'short'}">${(fc.direction||'').toUpperCase()}</span> <span class="mut" style="font-size:11px">${fc.calibrated?'calibrated':'uncalibrated'}</span></div>
+       <div style="font-size:20px;font-weight:700;margin-top:6px" class="${fc.expected_move_pct>=0?'pos':'neg'}">${fc.expected_move_pct>=0?'+':''}${fc.expected_move_pct}%</div>
+       <div class="mut" style="font-size:11px">exp ${fc.horizon_days}d · focus ${Math.round((fc.attention_focus||0)*100)}%</div></div>
+   </div>
+   <div style="margin-top:12px"><div class="mut" style="font-size:11px;margin-bottom:4px">Quantile band (P10 / P50 / P90)</div>
+     ${bandBar(q.p10,q.p50,q.p90)}
+     <div style="display:flex;justify-content:space-between;font-size:10px" class="mut"><span>${q.p10}%</span><span>${q.p50}%</span><span>${q.p90}%</span></div></div>
+   <div style="margin-top:12px"><div class="mut" style="font-size:11px;margin-bottom:4px">Term structure · band ${fc.band_method||'gaussian'}${fc.attention_rollout!=null?' · rollout '+Math.round(fc.attention_rollout*100)+'%':''}</div>
+     ${(fc.term_structure||[]).map(t=>`<span class="tag neutral" style="margin-right:6px">${t.horizon}d ${t.expected_move_pct>=0?'+':''}${t.expected_move_pct}%</span>`).join('')}</div>
+   <div style="margin-top:12px"><div class="mut" style="font-size:11px;margin-bottom:4px">Cross-attention drivers</div>${dbars}</div>`;
+}
+async function dtRegime(){
+  const el=$('#dt_regime'); if(!el)return; const b=await J('/api/marketbrain');
+  if(!b){el.innerHTML='<div class="empty">no data</div>';return;}
+  const rc={risk_on:'var(--green)',risk_off:'var(--red)',high_vol:'var(--amber)',neutral:'var(--muted)'};
+  const col=rc[b.regime]||'var(--muted)', po=b.posture||{}, pc=b.crypto_posture||{};
+  const breadth=Math.round((b.breadth||0)*100);
+  el.innerHTML=`<div class="regimebar"><span class="regimebadge" style="background:${col}22;color:${col}">${(b.regime||'—').replace(/_/g,' ')}</span>
+     <span class="mut" style="font-size:11px">conf ${Math.round((b.regime_confidence||0)*100)}% · risk appetite ${b.risk_appetite}</span></div>
+   <div style="margin:6px 0"><div style="display:flex;justify-content:space-between;font-size:11px"><span class="mut">Breadth</span><span class="num">${breadth}%</span></div><div class="bar"><i style="width:${breadth}%;background:var(--green)"></i></div></div>
+   <div class="trendgrid" style="margin-top:10px">
+     <div class="tcell"><div class="k">SPY vol (ann)</div><div class="v">${b.spy_vol_ann}%</div></div>
+     <div class="tcell"><div class="k">Equity trend</div><div class="v">${b.equity_trend}</div></div>
+     <div class="tcell"><div class="k">BTC trend</div><div class="v">${b.btc_trend}</div></div></div>
+   <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+     <div class="tcell" style="flex:1"><div class="k">Equity posture</div><div class="v" style="font-size:12px">${po.bias} ×${po.size_mult}</div><div class="mut" style="font-size:10px">${po.note||''}</div></div>
+     <div class="tcell" style="flex:1"><div class="k">Crypto posture</div><div class="v" style="font-size:12px">${pc.bias} ×${pc.size_mult}</div><div class="mut" style="font-size:10px">${pc.note||''}</div></div></div>`;
+}
+async function dtConfluence(){
+  const el=$('#dt_confluence'); if(!el)return; const c=await J('/api/confluence');
+  if(!c){el.innerHTML='<div class="empty">no data</div>';return;}
+  const items=c.items||[];
+  if(!items.length){el.innerHTML=`<div class="empty">No setups clear the confluence gate in <b>${(c.regime||'current').replace(/_/g,' ')}</b> regime — the desk is patient.</div>`;return;}
+  el.innerHTML=items.slice(0,12).map(it=>{
+    const comp=(it.composite!=null?it.composite:(it.score!=null?it.score:0));
+    const side=it.side||(comp>=0?'long':'short'); const w=Math.min(100,Math.abs(comp)*100);
+    return `<div class="row"><span class="sym">${it.symbol||'?'} <span class="tag ${side}">${side}</span></span>
+      <span style="flex:1;margin:0 10px"><div class="bar"><i style="width:${w}%;background:${comp>=0?'var(--green)':'var(--red)'}"></i></div></span>
+      <span class="num ${comp>=0?'pos':'neg'}">${comp>=0?'+':''}${Number(comp).toFixed(2)}</span></div>`;
+  }).join('');
+}
+async function dtSignals(){
+  const el=$('#dt_signals'); if(!el)return; const s=await J('/api/signal_scorecard');
+  if(!s){el.innerHTML='<div class="empty">no data</div>';return;}
+  const rows=s.by_source||[];
+  if(!rows.length){el.innerHTML='<div class="empty">no signals captured yet</div>';return;}
+  const maxN=Math.max(1,...rows.map(r=>r.signals||0));
+  el.innerHTML=rows.map(r=>{
+    const hr=(r.hit_rate!=null)?(r.hit_rate*100).toFixed(0)+'% hit':'maturing';
+    const w=Math.round(((r.signals||0)/maxN)*100);
+    return `<div style="margin:8px 0"><div style="display:flex;justify-content:space-between;font-size:11px"><span class="sym">${r.source}</span><span class="mut">${r.signals} sig · ${hr}</span></div><div class="bar"><i style="width:${w}%;background:var(--blue)"></i></div></div>`;
+  }).join('');
+}
+/* ---------- Performance tab (edge + attribution) ---------- */
+function verdictTag(v){
+  v=v||''; let c='var(--muted)', bg='#1c2531';
+  if(v==='EDGE'||v==='profitable'){c='var(--green)';bg='var(--green-bg)';}
+  else if(v==='negative'||v==='unprofitable'){c='var(--red)';bg='var(--red-bg)';}
+  else if(v.startsWith('maturing')){c='var(--amber)';bg='rgba(240,185,11,.12)';}
+  return `<span class="tag" style="color:${c};background:${bg}">${v}</span>`;
+}
+async function loadEdge(){
+  const el=$('#perf_edge'); if(!el)return; const r=await J('/api/edge'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  const b=r.baseline;
+  let head=`<div class="mut" style="font-size:12px;margin-bottom:8px">${r.summary||''}</div>`;
+  const m=r.maturation;
+  if(m){ const d=m.days_to_threshold;
+    const when=(d===0)?'verdict ready now':(d!=null?`first verdict ~${d}d`:`needs ${m.need} calls (have ${m.total})`);
+    const pct=Math.min(100,Math.round((m.matured/m.need)*100));
+    head+=`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:11px"><span class="mut">⏳ Transformer maturation — ${when}</span><span class="num">${m.matured}/${m.need}</span></div><div class="bar"><i style="width:${pct}%;background:var(--amber)"></i></div></div>`;
+  }
+  if(b) head+=`<div class="regimebar"><span class="regimebadge" style="background:#1c2531;color:var(--muted)">SPY B&amp;H ${b.spy_total_pct>=0?'+':''}${b.spy_total_pct}% / ${b.window_days}d</span></div>`;
+  const rows=(r.sources||[]).map(s=>{
+    const hr=(s.hit_rate!=null)?(s.hit_rate*100).toFixed(0)+'%':'—';
+    const dr=(s.avg_dir_return_pct!=null)?((s.avg_dir_return_pct>=0?'+':'')+s.avg_dir_return_pct+'%'):'—';
+    const w=(s.hit_rate!=null)?Math.round(s.hit_rate*100):0;
+    const col=(s.hit_rate!=null&&s.hit_rate>=0.5)?'var(--green)':'var(--red)';
+    return `<div class="row"><span class="sym" style="min-width:130px">${s.source}</span>
+      <span style="flex:1;margin:0 10px"><div class="bar"><i style="width:${w}%;background:${col}"></i></div></span>
+      <span class="num" style="width:42px;text-align:right">${hr}</span>
+      <span class="num mut" style="width:60px;text-align:right">${dr}</span>
+      <span style="width:120px;text-align:right">${verdictTag(s.verdict)}</span>
+      <span class="mut" style="width:74px;text-align:right;font-size:10px">${s.resolved||0}/${s.signals||0} res</span></div>`;
+  }).join('');
+  el.innerHTML=head+rows;
+}
+async function loadAttribution(){
+  const el=$('#perf_attr'); if(!el)return; const r=await J('/api/attribution'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  if(!r.voices||!r.voices.length){el.innerHTML=`<div class="empty">${r.summary||'maturing'}</div>`;return;}
+  const head=`<div class="mut" style="font-size:12px;margin-bottom:10px">${r.summary||''} <span class="dim">(${r.weights_source||''})</span></div>`;
+  const maxAbs=Math.max(0.01,...r.voices.map(v=>Math.abs(v.attributed_return_pct||0)));
+  const rows=r.voices.map(v=>{
+    const a=v.attributed_return_pct||0; const pos=a>=0; const w=Math.round(Math.abs(a)/maxAbs*50);
+    const lh=(v.lead_hit_rate!=null)?(v.lead_hit_rate*100).toFixed(0)+'% lead':'';
+    return `<div class="row"><span class="sym" style="min-width:90px">${v.voice}</span>
+      <span class="mut" style="width:42px;font-size:10px">w ${v.weight}</span>
+      <span style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="width:50%;display:flex;justify-content:flex-end"><i style="height:8px;border-radius:3px;width:${pos?0:w}%;background:var(--red)"></i></span>
+        <span style="width:1px;height:14px;background:var(--line)"></span>
+        <span style="width:50%"><i style="height:8px;border-radius:3px;display:block;width:${pos?w:0}%;background:var(--green)"></i></span>
+      </span>
+      <span class="num ${pos?'pos':'neg'}" style="width:64px;text-align:right">${pos?'+':''}${a}%</span>
+      <span class="mut" style="width:74px;text-align:right;font-size:10px">${lh}</span>
+      <span style="width:110px;text-align:right">${verdictTag(v.verdict)}</span></div>`;
+  }).join('');
+  el.innerHTML=head+rows;
+}
+async function voiceOverride(voice,action,extra){
+  try{ await fetch('/api/voices/override',{method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify(Object.assign({voice,action},extra||{}))}); }catch(e){}
+  try{ toast(`${action} <b>${voice}</b>`,'ok','Voices'); }catch(e){}
+  loadVoices();
+}
+async function loadVoices(){
+  const el=$('#perf_voices'); if(!el)return; const r=await J('/api/voices'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  const head=`<div class="mut" style="font-size:11px;margin-bottom:8px">regime ${r.regime} · weights: ${r.weights_source}</div>`;
+  const rows=(r.voices||[]).map(v=>{
+    const w=Math.round((v.effective||0)*100);
+    const attr=(v.attributed_return_pct!=null)?((v.attributed_return_pct>=0?'+':'')+v.attributed_return_pct+'%'):'—';
+    const lbl=(v.learned!=null)?`learned ${(v.learned*100).toFixed(0)}%`:`base ${(v.base*100).toFixed(0)}%`;
+    const muted=v.muted, pinned=v.pinned!=null;
+    return `<div class="row" style="opacity:${muted?0.45:1}">
+      <span class="sym" style="min-width:88px">${v.voice}${pinned?' 📌':''}</span>
+      <span style="flex:1;margin:0 10px"><div class="bar"><i style="width:${muted?0:w}%;background:${pinned?'var(--amber)':'var(--blue)'}"></i></div></span>
+      <span class="num" style="width:34px;text-align:right">${muted?'—':w+'%'}</span>
+      <span class="mut" style="width:86px;text-align:right;font-size:10px">${lbl}</span>
+      <span class="num ${(v.attributed_return_pct||0)>=0?'pos':'neg'}" style="width:52px;text-align:right">${attr}</span>
+      <button class="btn ${muted?'red':''}" style="font-size:10px;padding:2px 7px" onclick="voiceOverride('${v.voice}','mute',{on:${!muted}})">${muted?'Unmute':'Mute'}</button>
+      <button class="btn ${pinned?'green':''}" style="font-size:10px;padding:2px 7px" onclick="voiceOverride('${v.voice}','pin',{weight:${pinned?'null':(v.effective||0.2)}})">${pinned?'Unpin':'Pin'}</button>
+    </div>`;
+  }).join('');
+  el.innerHTML=head+rows;
+}
+async function setAutonomy(body){
+  try{ await fetch('/api/autonomy/mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}catch(e){}
+  try{ toast(body.mode?('mode → <b>'+body.mode+'</b>'):('kill-switch '+(body.kill_switch?'<b>ON</b>':'off')),'warn','Autonomy'); }catch(e){}
+  loadAutonomy();
+}
+async function loadAutonomy(){
+  const el=$('#perf_autonomy'); if(!el)return; const r=await J('/api/autonomy'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  const p=r.policy||{}, mode=p.mode, kill=p.kill_switch;
+  const modeBtns=['off','propose','auto'].map(m=>`<button class="btn ${mode===m&&!kill?'green':''}" style="font-size:11px;padding:3px 10px" onclick="setAutonomy({mode:'${m}'})">${m}</button>`).join(' ');
+  const killBtn=`<button class="btn ${kill?'red':''}" style="font-size:11px;padding:3px 10px" onclick="setAutonomy({kill_switch:${!kill}})">${kill?'🛑 KILLED — resume':'Kill-switch'}</button>`;
+  const head=`<div class="row" style="gap:8px;align-items:center;margin-bottom:10px;border:none;padding:0">
+    <span class="mut" style="font-size:11px">MODE</span> ${modeBtns}<span style="flex:1"></span>${killBtn}</div>
+    <div class="mut" style="font-size:10px;margin-bottom:8px">off = no changes · propose = log only (review) · auto = apply conservative actions, propose the rest</div>`;
+  const acts=(r.actions||[]).map(a=>{
+    const tag=a.eligible?`<span class="tag" style="color:var(--green);background:var(--green-bg)">eligible</span>`:`<span class="tag neutral">blocked</span>`;
+    const safe=a.auto_safe?'<span class="mut" style="font-size:9px"> · auto-safe</span>':'<span class="mut" style="font-size:9px"> · needs review</span>';
+    return `<div class="row"><span class="sym" style="min-width:160px;font-size:12px">${a.action}${safe}</span>
+      <span style="width:80px;text-align:center">${tag}</span>
+      <span class="mut" style="flex:1;font-size:11px">${a.reason||a.desc}</span></div>`;
+  }).join('');
+  let aud='';
+  if((r.recent||[]).length){
+    aud=`<div class="hdr" style="margin:12px 0 4px">RECENT AUTONOMY ACTIONS</div>`+
+      r.recent.slice(0,6).map(x=>`<div class="row" style="font-size:11px"><span class="tag ${x.status==='applied'?'long':(x.status==='proposed'?'watch':'neutral')}">${x.status}</span><span class="mut" style="flex:1;margin-left:8px">${x.action}: ${x.reason||''}</span></div>`).join('');
+  }
+  el.innerHTML=head+acts+aud;
+}
+async function loadShadow(){
+  const el=$('#perf_shadow'); if(!el)return; const r=await J('/api/shadow'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  const st=r.standings||{}; const books=st.books||[]; const spy=st.spy_hold;
+  const head=`<div class="mut" style="font-size:11px;margin-bottom:8px">${books.length} configs · ${st.open_signals||0} signals maturing · horizon ${r.horizon}d · universe ${ (r.universe||[]).length } names</div>`;
+  const traded=books.filter(b=>b.trades>0);
+  if(!traded.length){ el.innerHTML=head+'<div class="empty">no resolved signals yet — configs trading forward in parallel</div>'; return; }
+  const maxAbs=Math.max(0.01,...books.map(b=>Math.abs(b.total_return_pct||0)));
+  const rows=books.map((b,i)=>{
+    const t=b.total_return_pct||0, pos=t>=0, w=Math.round(Math.abs(t)/maxAbs*50);
+    const hr=(b.hit_rate!=null)?(b.hit_rate*100).toFixed(0)+'%':'—';
+    const lead=(i===0&&b.trades>0)?' 👑':'';
+    const isSpy=b.book==='spy_hold';
+    return `<div class="row" style="${isSpy?'opacity:.8':''}">
+      <span class="sym" style="min-width:120px;font-size:12px">${b.book}${lead}</span>
+      <span style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="width:50%;display:flex;justify-content:flex-end"><i style="height:8px;border-radius:3px;width:${pos?0:w}%;background:var(--red)"></i></span>
+        <span style="width:1px;height:14px;background:var(--line)"></span>
+        <span style="width:50%"><i style="height:8px;border-radius:3px;display:block;width:${pos?w:0}%;background:var(--green)"></i></span>
+      </span>
+      <span class="num ${pos?'pos':'neg'}" style="width:62px;text-align:right">${pos?'+':''}${t}%</span>
+      <span class="mut" style="width:46px;text-align:right;font-size:10px">${hr}</span>
+      <span class="mut" style="width:66px;text-align:right;font-size:10px">${b.trades} trd</span></div>`;
+  }).join('');
+  let foot='';
+  if(spy && spy.trades>0){ foot=`<div class="mut" style="font-size:10px;margin-top:8px">benchmark: spy_hold ${spy.total_return_pct>=0?'+':''}${spy.total_return_pct}% over ${spy.trades} — a config beats passive only if it ranks above this.</div>`; }
+  el.innerHTML=head+rows+foot;
+}
+async function cortexEnable(on){
+  try{ await fetch('/api/cortex/enable',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:on})});}catch(e){}
+  try{ toast('neural core '+(on?'<b>ENABLED</b> in live confluence':'disabled'),on?'ok':'warn','Neural Core'); }catch(e){}
+  loadCortex();
+}
+async function loadCortex(){
+  const el=$('#perf_cortex'); if(!el)return; const r=await J('/api/cortex'); if(!r){el.innerHTML='<div class="empty">no data</div>';return;}
+  const c=r.card||{}, sh=r.shadow, lv=r.live_shadow, on=r.enabled;
+  if(!c.trained){ el.innerHTML=`<div class="empty">neural core not trained yet — needs ≥30 resolved decisions to learn voice interactions</div>`; return; }
+  const acc=Math.round((c.val_acc||0)*100);
+  const enBtn=`<button class="btn ${on?'green':''}" style="font-size:11px;padding:3px 10px" onclick="cortexEnable(${!on})">${on?'● LIVE — disable':'Enable in confluence'}</button>`;
+  const head=`<div class="row" style="border:none;padding:0;align-items:center;gap:12px;margin-bottom:10px">
+      <div style="text-align:center">${donut(acc,'var(--purple)',acc+'%')}<div class="mut" style="font-size:10px;margin-top:2px">VAL ACC</div></div>
+      <div style="flex:1">
+        <div style="font-size:12px"><b>${c.hidden}</b>-unit hidden layer · ${c.features} voices in · trained on ${c.n} outcomes</div>
+        <div class="mut" style="font-size:11px;margin-top:3px">loss ${c.loss} · champion acc ${Math.round((c.champion_val_acc||c.val_acc)*100)}% · ${c.updated||''}</div>
+      </div>${enBtn}</div>`;
+  let cmp='';
+  if(sh && sh.trades>0){
+    const cr=sh.total_return_pct, lr=lv?lv.total_return_pct:null, beat=(lr!=null && cr>lr);
+    cmp=`<div class="row"><span class="sym" style="min-width:120px">vs live (shadow)</span>
+      <span class="mut" style="flex:1;font-size:11px">neural ${cr>=0?'+':''}${cr}% over ${sh.trades} trades${lr!=null?` · live ${lr>=0?'+':''}${lr}%`:''}</span>
+      <span class="tag ${beat?'long':'neutral'}">${beat?'beating live':'not yet ahead'}</span></div>`;
+  } else {
+    cmp=`<div class="mut" style="font-size:11px">Shadow Lab measuring the neural core forward vs the linear blend — it can auto-enable once it wins.</div>`;
+  }
+  el.innerHTML=head+cmp;
+}
+async function loadPerformance(){ await Promise.all([loadAutonomy(),loadEdge(),loadAttribution(),loadVoices(),loadShadow(),loadCortex()]); }
+async function loadDayTrader(){ await Promise.all([dtForecast(),dtRegime(),dtConfluence(),dtSignals()]); }
+(function(){const i=document.getElementById('dtsym'); if(i)i.addEventListener('keydown',e=>{if(e.key==='Enter'){DTSYM=e.target.value.trim().toUpperCase()||'SPY';dtForecast();}});})();
+
+async function refresh(){
+  await loadAccount();
+  await Promise.all([loadKpis(),loadWatch(),loadBrain(),loadBots(),loadEquity(),loadPrice(),loadDecisions(),loadNews(),loadTape(),loadML(),loadAgents(),loadHealth(),loadTraces(),loadApprovals(),loadWSB(),loadNewsBar(),loadSigScore(),loadPredictions(),loadMesh(),loadHealthFull(),loadDayTrader(),loadPerformance(),loadNews(),loadTimeline(),loadAlerts(),loadNeural()]);
+  loadConfluence();
+  $('#updated').textContent='updated '+new Date().toLocaleTimeString();
+}
+refresh();
+setupTabs();
+renderChat(false);
+document.getElementById('chatq').addEventListener('keydown',e=>{if(e.key==='Enter')councilSend();});
+setInterval(refresh,20000);
+window.addEventListener('resize',()=>{loadPrice();});
+
+/* ===================== UX: toasts + command palette ===================== */
+function toast(msg, kind, title){
+  const c=document.getElementById('toasts'); if(!c)return;
+  const t=document.createElement('div'); t.className='toast '+(kind||'');
+  t.innerHTML=(title?`<span class="tt">${title}</span>`:'')+msg;
+  c.appendChild(t);
+  setTimeout(()=>{t.style.transition='opacity .4s';t.style.opacity='0';setTimeout(()=>t.remove(),400);},3400);
+}
+function cmdkCommands(){
+  const tabs=[['overview','Overview'],['flow','Decision Flow'],['agents','Agents & Mesh'],['intel','Intelligence'],['neural','Neural'],['daytrader','Day Trader'],['performance','Performance'],['news','News'],['timeline','Timeline'],['alerts','Alerts'],['council','Council Chat'],['all','All']];
+  const cmds=tabs.map(([t,n])=>({cat:'Go',label:'Go to '+n,run:()=>showTab(t)}));
+  cmds.push({cat:'Data',label:'Reload all data',run:()=>{refresh();toast('Refreshing all panels…','ok','Reload');}});
+  cmds.push({cat:'Brain',label:'Open Platform Brain (3D)',run:()=>window.open('http://localhost:3000/brain','_blank')});
+  ['off','propose','auto'].forEach(m=>cmds.push({cat:'Autonomy',label:'Set autonomy mode → '+m,run:()=>{setAutonomy({mode:m});showTab('performance');}}));
+  cmds.push({cat:'Autonomy',label:'Toggle autonomy kill-switch',run:async()=>{const r=await J('/api/autonomy');await setAutonomy({kill_switch:!(r&&r.policy&&r.policy.kill_switch)});showTab('performance');}});
+  cmds.push({cat:'Neural',label:'Enable neural core (cortex)',run:()=>{cortexEnable(true);showTab('performance');}});
+  cmds.push({cat:'Neural',label:'Disable neural core (cortex)',run:()=>{cortexEnable(false);showTab('performance');}});
+  cmds.push({cat:'Alerts',label:'Acknowledge all alerts',run:()=>{ackAlert('all');toast('All alerts acknowledged','ok','Alerts');}});
+  return cmds;
+}
+let CMDK={open:false,sel:0,items:[]};
+function cmdkRender(q){
+  q=(q||'').trim().toLowerCase();
+  const sym=q.toUpperCase().replace(/[^A-Z0-9.\/]/g,'');
+  let items=cmdkCommands();
+  if(q) items=items.filter(c=>c.label.toLowerCase().includes(q)||c.cat.toLowerCase().includes(q));
+  if(sym.length>=1 && sym.length<=6 && /^[A-Z]/.test(sym)){
+    items.unshift({cat:'Symbol',label:'Set Day-Trader symbol → '+sym,run:()=>{DTSYM=sym;PXSYM=sym;showTab('daytrader');try{dtForecast();}catch(e){}try{loadPrice();}catch(e){}toast('Symbol set to '+sym,'ok','Day Trader');}});
+  }
+  CMDK.items=items.slice(0,40); if(CMDK.sel>=CMDK.items.length)CMDK.sel=0;
+  const res=document.getElementById('cmdkres');
+  res.innerHTML=CMDK.items.map((c,i)=>`<div class="opt ${i===CMDK.sel?'sel':''}" data-i="${i}"><span class="cat">${c.cat}</span>${c.label}</div>`).join('')||'<div class="opt"><span class="cat">—</span>no matches</div>';
+  [...res.querySelectorAll('.opt[data-i]')].forEach(el=>{el.onmouseenter=()=>{CMDK.sel=+el.dataset.i;cmdkPaint();};el.onclick=cmdkRun;});
+}
+function cmdkPaint(){[...document.querySelectorAll('#cmdkres .opt')].forEach((el,i)=>el.classList.toggle('sel',i===CMDK.sel));
+  const s=document.querySelector('#cmdkres .opt.sel'); if(s)s.scrollIntoView({block:'nearest'});}
+function cmdkOpen(){CMDK.open=true;CMDK.sel=0;document.getElementById('cmdkov').classList.add('on');const i=document.getElementById('cmdkin');i.value='';cmdkRender('');i.focus();}
+function cmdkClose(){CMDK.open=false;document.getElementById('cmdkov').classList.remove('on');}
+function cmdkRun(){const c=CMDK.items[CMDK.sel];cmdkClose();if(c&&c.run)c.run();}
+(function setupCmdK(){
+  const ov=document.getElementById('cmdkov'), inp=document.getElementById('cmdkin');
+  ov.addEventListener('click',e=>{if(e.target===ov)cmdkClose();});
+  inp.addEventListener('input',e=>cmdkRender(e.target.value));
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){e.preventDefault();CMDK.sel=Math.min(CMDK.items.length-1,CMDK.sel+1);cmdkPaint();}
+    else if(e.key==='ArrowUp'){e.preventDefault();CMDK.sel=Math.max(0,CMDK.sel-1);cmdkPaint();}
+    else if(e.key==='Enter'){e.preventDefault();cmdkRun();}
+    else if(e.key==='Escape'){cmdkClose();}
+  });
+  const TABS=['overview','flow','agents','intel','neural','daytrader','performance','news','timeline','alerts','council','all'];
+  window.addEventListener('keydown',e=>{
+    if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();CMDK.open?cmdkClose():cmdkOpen();return;}
+    const typing=/^(INPUT|TEXTAREA)$/.test((e.target&&e.target.tagName)||'');
+    if(typing||CMDK.open)return;
+    if(e.key==='/'){e.preventDefault();cmdkOpen();}
+    else if(e.key>='1'&&e.key<='9'){showTab(TABS[+e.key-1]);}
+    else if(e.key==='?'){toast('⌘/Ctrl-K palette · 1–9 tabs · / search','ok','Shortcuts');}
+  });
+  const nf=document.getElementById('newsfilters');
+  if(nf) nf.addEventListener('click',e=>{ if(e.target.dataset && e.target.dataset.c!==undefined){ [...nf.children].forEach(b=>b.classList.remove('on')); e.target.classList.add('on'); NEWSCAT=e.target.dataset.c; loadNews(); }});
+  const nq=document.getElementById('newsq');
+  if(nq) nq.addEventListener('input',e=>{ NEWSQ=e.target.value.trim(); clearTimeout(window.__nq); window.__nq=setTimeout(loadNews,300); });
+  const tf=document.getElementById('tlfilters');
+  if(tf) tf.addEventListener('click',e=>{ if(e.target.dataset && e.target.dataset.k!==undefined){ [...tf.children].forEach(b=>b.classList.remove('on')); e.target.classList.add('on'); TLKIND=e.target.dataset.k; loadTimeline(); }});
+  const af=document.getElementById('alertfilters');
+  if(af) af.addEventListener('click',e=>{ if(e.target.dataset && e.target.dataset.s!==undefined){ [...af.children].forEach(b=>b.classList.remove('on')); e.target.classList.add('on'); ALERTSEV=e.target.dataset.s; loadAlerts(); }});
+  const rf=document.getElementById('rsnfilter');
+  if(rf) rf.addEventListener('click',e=>{ if(e.target.dataset && e.target.dataset.g!==undefined){ [...rf.children].forEach(b=>b.classList.remove('on')); e.target.classList.add('on'); RSNGATE=e.target.dataset.g; loadReasoning(); }});
+})();
+</script>
+</body>
+</html>

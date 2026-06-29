@@ -1,0 +1,44 @@
+# ---- secrets (NEVER commit) ----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+
+# ---- python ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# ---- node / next (brain app) ----
+node_modules/
+brain/node_modules/
+brain/.next/
+brain/out/
+.next/
+npm-debug.log*
+yarn-error.log*
+
+# ---- runtime data / logs (regenerated; may contain account data) ----
+data/
+*.log
+*.db
+*.sqlite
+
+# ---- editor / os ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- scratch ----
+_backfill.py
+_edgetest.py
+_runreport.py
