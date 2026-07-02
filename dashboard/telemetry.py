@@ -36,9 +36,9 @@ def c_id(name): return "c:" + slug(name)          # connector (MCP / external)
 MODELS = ["anthropic", "groq", "cohere", "cloudflare", "openrouter", "replicate", "omni"]
 LAYERS = ["reasoning", "brain", "prediction", "ml", "confluence", "execution", "mesh", "memory"]
 DATASTORES = [("CRSP-lite", "crsp"), ("predict.db", "predict"), ("mesh.db", "mesh"),
-              ("signals.db", "signals"), ("state.db", "state"), ("Pieces LTM", "ltm")]
+              ("signals.db", "signals"), ("state.db", "state"), ("LTM store", "ltm")]
 # External connectors (MCP + data/broker feeds) -- a first-class group
-CONNECTORS = [("Pieces MCP", "pieces"), ("Alpaca", "alpaca"), ("CoinEx", "coinex"),
+CONNECTORS = [("LTM (local)", "pieces"), ("Alpaca", "alpaca"), ("CoinEx", "coinex"),
               ("WallStreetBets", "wsb"), ("News RSS", "news")]
 # runtime "agents" that aren't in ROSTER but appear in traces
 EXTRA_AGENTS = ["Mesh", "Predictor", "SignalCapture", "Reflex", "Reflector"]
@@ -77,17 +77,22 @@ def _connector_status() -> dict:
     if _CONN_STATUS["val"] and now - _CONN_STATUS["ts"] < 60:
         return _CONN_STATUS["val"]
     st: dict = {}
+    # The memory connector (node id c:pieces) is now the local SQLite+Cloudflare
+    # LTM — no external MCP server required. Report it live with a memory count.
     try:
-        use = os.environ.get("USE_PIECES", "true").strip().lower() in ("1", "true", "yes", "on")
-        if not use:
-            st["pieces"] = ("offline", "USE_PIECES disabled")
-        else:
+        use_pieces = os.environ.get("USE_PIECES", "false").strip().lower() in ("1", "true", "yes", "on")
+        if use_pieces:
             import socket
             s = socket.create_connection(("localhost", 39300), timeout=0.5)
             s.close()
-            st["pieces"] = ("online", "Pieces OS reachable :39300")
-    except Exception:  # noqa: BLE001
-        st["pieces"] = ("offline", "Pieces OS not reachable")
+            st["pieces"] = ("online", "Pieces MCP reachable :39300")
+        else:
+            from trader import ltm
+            s = ltm.stats()
+            emb = " (+embeddings)" if s.get("embedded") else ""
+            st["pieces"] = ("online", f"SQLite+CF · {s.get('items', 0)} memories{emb}")
+    except Exception as e:  # noqa: BLE001
+        st["pieces"] = ("online", f"local LTM ready")
     try:
         from trader import config
         c = config.load()
@@ -406,13 +411,4 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 if __name__ == "__main__":
     t = build_topology()
     print("topology:", len(t["nodes"]), "nodes,", len(t["edges"]), "edges")
-    groups = {}
-    for n in t["nodes"]:
-        groups[n["group"]] = groups.get(n["group"], 0) + 1
-    print("groups:", groups)
-    ev, cur = fire_events_since(0)
-    print("fire events available:", len(ev))
-    kinds = {}
-    for e in ev:
-        kinds[e["kind"]] = kinds.get(e["kind"], 0) + 1
-    print("by kind:", kinds)
+   

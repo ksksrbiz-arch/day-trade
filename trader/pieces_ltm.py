@@ -3,14 +3,15 @@ Pieces Long-Term Memory (LTM) connector -- the system's institutional memory.
 
 Talks to the local Pieces MCP server (streamable-HTTP JSON-RPC) so the platform
 can (a) WRITE durable memories of what it saw/decided and (b) ASK its own past
-to inform new decisions. This is how the system "improves throughout": the
-Market Brain recalls how similar regimes played out; the autotuner records every
-parameter change with rationale; the council can consult history.
+to inform new decisions.
 
-IDEMPOTENT BY DESIGN: writes are de-duplicated by a content hash kept in
-data/ltm_seen.json, so re-running a cycle (same day, same regime, same tune)
-never creates duplicate memories. Every call is independent + fail-soft: if
-Pieces is offline, the rest of the system is unaffected.
+CLOUD DEFAULT: when the Pieces MCP path is disabled/unreachable (USE_PIECES=false),
+this transparently delegates to the local SQLite+Cloudflare LTM (trader/ltm.py),
+so the memory layer keeps working with zero call-site changes.
+
+IDEMPOTENT BY DESIGN: writes are de-duplicated by a content hash (here via
+data/ltm_seen.json for the MCP path; the local LTM uses a content-hash primary
+key). Every call is independent + fail-soft.
 """
 from __future__ import annotations
 
@@ -56,7 +57,6 @@ class PiecesLTM:
             sid = hd.get("Mcp-Session-Id") or hd.get("mcp-session-id")
             self._rpc(sid, "notifications/initialized", notify=True)
             _, body = self._rpc(sid, "tools/call", {"name": name, "arguments": args})
-            # body may be JSON or SSE ("data: {...}")
             text = body
             if "data:" in body and "{" in body:
                 for line in body.splitlines():
@@ -69,25 +69,42 @@ class PiecesLTM:
             print(f"[pieces] {name} failed (fail-soft): {e}")
             return ""
 
-    # --- public API ---
+    # --- public API (delegates to local LTM when MCP path is off) ---
     def ask(self, question: str, topics=None) -> str:
         """Query the long-term memory. Returns recalled text (or '')."""
-        return self._call_tool("ask_pieces_ltm",
-                               {"question": question, "topics": topics or []})
+        if self.enabled:
+            out = self._call_tool("ask_pieces_ltm",
+                                   {"question": question, "topics": topics or []})
+            if out:
+                return out
+        try:
+            from trader.ltm import ask as _local_ask
+            return _local_ask(question, topics)
+        except Exception:  # noqa: BLE001
+            return ""
 
     def remember(self, description: str, summary_md: str, dedup_key: str = "") -> bool:
-        """Idempotently store a memory. Returns True if written, False if a
-        duplicate (by dedup_key or content hash) was skipped."""
+        """Idempotently store a memory. True if newly written, False if duplicate."""
         if not self.enabled:
-            return False
+            try:
+                from trader.ltm import remember as _local_remember
+                return _local_remember(description, summary_md, dedup_key)
+            except Exception:  # noqa: BLE001
+                return False
         key = dedup_key or (description + "|" + summary_md)
         h = hashlib.sha1(key.encode("utf-8")).hexdigest()
         seen = _load_seen()
         if h in seen:
             return False
-        out = self._call_tool("create_pieces_memory",
-                              {"summary_description": description, "summary": summary_md})
-        # mark seen even on best-effort write to preserve idempotency for the day
+        self._call_tool("create_pieces_memory",
+                        {"summary_description": description, "summary": summary_md})
+        # mirror into the durable local store too (idempotent) so recall works
+        # even when the MCP server is later unavailable.
+        try:
+            from trader.ltm import remember as _local_remember
+            _local_remember(description, summary_md, dedup_key)
+        except Exception:  # noqa: BLE001
+            pass
         seen.add(h); _save_seen(seen)
         return True
 

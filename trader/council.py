@@ -30,7 +30,7 @@ import urllib.error
 from .omni import parse_stance, OmniClient, research as omni_research
 from .resilience import call as _rcall
 
-_UA = "paper-trader/1.0"
+_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
 _VAL = {"bullish": 1.0, "neutral": 0.0, "bearish": -1.0}
 
 PROMPT = (
