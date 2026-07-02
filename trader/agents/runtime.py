@@ -108,6 +108,21 @@ def _cortex(run_id: int) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    # 1b) alpha_engine voice (prediction-market scout) -> mesh + LTM
+    try:
+        from .. import alpha_engine as _ae
+        if _ae.enabled():
+            sig = _ae.signal_for(sym)
+            if sig and sig.get("score") is not None:
+                mesh.publish("prediction", "alpha_engine",
+                             f"{sym}: alpha_engine score {sig.get('score'):+.2f} "
+                             f"(conf {sig.get('confidence',0):.2f}, n={sig.get('n',0)})",
+                             symbol=sym, salience=0.5)
+                state.trace(run_id, "AlphaEngine", "alpha_engine", "signal", "done", 0,
+                            f"{sym}: {sig.get('score'):+.2f}")
+    except Exception:  # noqa: BLE001
+        pass
+
     # 2) LTM recall -> mesh (shared history/context for every reasoner)
     recall = ""
     try:

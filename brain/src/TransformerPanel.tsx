@@ -26,6 +26,8 @@ type Trace = {
   pooled_norm: number;
   cross_attention: { weights: Record<string, number>; dominant: string | null };
   entropy_by_layer: number[];
+  attention_rollout?: number[];
+  n_seeds?: number;
   direction?: { prob_up?: number; bias?: string } & Record<string, unknown>;
   error?: string;
 };
@@ -40,6 +42,7 @@ export default function TransformerPanel() {
   const [live, setLive] = useState(false);
   const heatRef = useRef<HTMLCanvasElement>(null);
   const actRef = useRef<HTMLCanvasElement>(null);
+  const rollRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -117,6 +120,26 @@ export default function TransformerPanel() {
       ctx.fillRect(i * bw, h - l * h, Math.max(1, bw - 1), 2);
     }
   }, [trace, li]);
+
+  // --- attention rollout (true per-patch information flow across layers) ---
+  useEffect(() => {
+    const c = rollRef.current;
+    const r = trace?.attention_rollout || [];
+    if (!c || r.length === 0) return;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    const w = 268, h = 26;
+    c.width = w; c.height = h;
+    ctx.clearRect(0, 0, w, h);
+    const bw = w / r.length;
+    const mx = Math.max(1e-9, ...r);
+    for (let i = 0; i < r.length; i++) {
+      const v = r[i] / mx;
+      const g = Math.round(60 + v * 180);
+      ctx.fillStyle = `rgb(${Math.round(30 + v * 60)},${g},${Math.round(200 - v * 40)})`;
+      ctx.fillRect(i * bw, h - v * h, Math.max(1, bw - 1), v * h);
+    }
+  }, [trace]);
 
   if (!open) {
     return (
@@ -204,6 +227,11 @@ export default function TransformerPanel() {
           {/* per-patch activation strip */}
           <div style={{ ...sectionLabel, marginTop: 10 }}>PATCH ACTIVATIONS (embed ▏ latent)</div>
           <canvas ref={actRef} style={{ width: "100%", height: 46, borderRadius: 4 }} />
+
+          <div style={{ ...sectionLabel, marginTop: 10 }}>
+            ATTENTION ROLLOUT{trace.n_seeds ? ` · ${trace.n_seeds}-seed ensemble` : ""}
+          </div>
+          <canvas ref={rollRef} style={{ width: "100%", height: 26, borderRadius: 4 }} />
 
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#8aa" }}>
             <span>‖pooled‖ {trace.pooled_norm}</span>

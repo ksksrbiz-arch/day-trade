@@ -897,6 +897,36 @@ if __name__ == "__main__":
 _TRACE_SYMBOLS = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL", "MSFT"]
 
 
+_ENSEMBLE_SEEDS = (11, 23, 37)
+_ENSEMBLE = None
+
+
+def _ensemble():
+    """A small ensemble of fixed-seed encoders. Averaging over seeds removes the
+    arbitrariness of a single random init -> a stabler representation + attention."""
+    global _ENSEMBLE
+    if _ENSEMBLE is None:
+        _ENSEMBLE = [TransformerEncoder(seed=sd) for sd in _ENSEMBLE_SEEDS]
+    return _ENSEMBLE
+
+
+def _attn_rollout(maps) -> list:
+    """True attention rollout (Abnar & Zuidema 2020): compose (A+I) across layers
+    and read per-patch importance. Far more faithful than a single layer's map."""
+    R = None
+    for A in maps:
+        A = np.asarray(A, dtype=float)
+        n = A.shape[0]
+        M = A + np.eye(n)
+        M = M / (M.sum(axis=-1, keepdims=True) + 1e-12)
+        R = M if R is None else M @ R
+    if R is None:
+        return []
+    imp = R.mean(axis=0)
+    imp = imp / (imp.sum() + 1e-12)
+    return [round(float(v), 4) for v in imp]
+
+
 def encode_trace(series: np.ndarray, max_patches: int = 24) -> dict:
     """Run a REAL forward pass through the encoder and capture every internal:
     per-layer attention matrix, attention entropy, per-patch latent norms, the
@@ -920,17 +950,35 @@ def encode_trace(series: np.ndarray, max_patches: int = 24) -> dict:
     out["embed_norms"] = [round(float(v), 4) for v in np.linalg.norm(X, axis=1)]
     out["patch_input"] = [round(float(p.mean()), 5) for p in P]
     mask = sliding_dilated_mask(n, window=min(16, n), dilation=2)
-    for L in enc.layers:
-        A, w = enc._mha(layernorm(X), L, mask)
-        X = X + A
-        F = gelu(layernorm(X) @ L["W1"] + L["b1"]) @ L["W2"] + L["b2"]
-        X = X + F
+    ens = _ensemble()
+    n_layers = enc.n_layers
+    per_layer_w = [[] for _ in range(n_layers)]
+    prim_latents = [None] * n_layers
+    prim_final = X
+    for ei, e in enumerate(ens):
+        Xe = gelu(P @ e.W_embed + e.b_embed)
+        for li, L in enumerate(e.layers):
+            A, w = e._mha(layernorm(Xe), L, mask)
+            Xe = Xe + A
+            Fe = gelu(layernorm(Xe) @ L["W1"] + L["b1"]) @ L["W2"] + L["b2"]
+            Xe = Xe + Fe
+            per_layer_w[li].append(np.asarray(w))
+            if ei == 0:
+                prim_latents[li] = [round(float(v), 4) for v in np.linalg.norm(Xe, axis=1)]
+        if ei == 0:
+            prim_final = Xe
+    avg_maps = []
+    for li in range(n_layers):
+        w_avg = np.mean(per_layer_w[li], axis=0)     # ensemble-averaged attention
+        avg_maps.append(w_avg)
         out["layers"].append({
-            "attn": [[round(float(c), 4) for c in row] for row in np.asarray(w)],
-            "entropy": attention_entropy(w),
-            "latent_norms": [round(float(v), 4) for v in np.linalg.norm(X, axis=1)],
+            "attn": [[round(float(c), 4) for c in row] for row in w_avg],
+            "entropy": attention_entropy(w_avg),
+            "latent_norms": prim_latents[li] or [],
         })
-    pooled = X.mean(axis=0)
+    out["attention_rollout"] = _attn_rollout(avg_maps)
+    out["n_seeds"] = len(ens)
+    pooled = prim_final.mean(axis=0)
     out["pooled"] = [round(float(v), 4) for v in pooled]
     out["pooled_norm"] = round(float(np.linalg.norm(pooled)), 4)
     return out
@@ -963,6 +1011,8 @@ def live_trace(symbol: str = "SPY", ttl: float = 12.0) -> dict:
             "n_layers": tr["n_layers"], "layers": tr["layers"], "embed_norms": tr["embed_norms"],
             "patch_input": tr["patch_input"], "pooled": tr["pooled"], "pooled_norm": tr["pooled_norm"],
             "cross_attention": cross, "direction": direction,
+            "attention_rollout": tr.get("attention_rollout", []),
+            "n_seeds": tr.get("n_seeds", 1),
             "entropy_by_layer": [l["entropy"] for l in tr["layers"]]}
     _LIVE_TRACE_CACHE[symbol] = (_time.time(), _out)
     return _out
