@@ -9,7 +9,11 @@ from dataclasses import dataclass, field
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    load_dotenv()  # local ./.env
+    # Also honor a Render/hosted Secret File mounted outside the working dir.
+    for _p in ("/etc/secrets/.env", "/app/.env"):
+        if os.path.exists(_p):
+            load_dotenv(_p, override=False)
 except ImportError:
     pass
 
