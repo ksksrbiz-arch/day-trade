@@ -25,12 +25,12 @@ from statistics import fmean
 # Regime -> method weight multipliers. Trend regimes trust price/quant momentum;
 # stress trusts fundamentals (quality) and shrinks risk; ranges balance.
 _REGIME_W = {
-    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "cortex": 1.2},
-    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "cortex": 1.1},
-    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "cortex": 1.0},
-    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "cortex": 1.2},
+    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "alpha_engine": 1.0, "cortex": 1.2},
+    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "alpha_engine": 1.2, "cortex": 1.1},
+    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "alpha_engine": 1.2, "cortex": 1.0},
+    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "alpha_engine": 1.0, "cortex": 1.2},
 }
-_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "cortex": 0.30}
+_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "alpha_engine": 0.14, "cortex": 0.30}
 
 _emph_cache = {"ts": 0.0, "val": None}
 
@@ -69,12 +69,14 @@ def _norm(weights: dict, present: set[str]) -> dict:
 
 
 def confluence(ta=None, quant=None, fundamental=None, council=None, ml=None,
-               prediction=None, tnet=None, cortex=None, regime: str | None = None, min_agree: int = 2,
+               prediction=None, tnet=None, alpha_engine=None, cortex=None,
+               regime: str | None = None, min_agree: int = 2,
                min_composite: float = 0.20, size_min: float = 0.5,
                size_max: float = 2.0) -> Conviction:
     """Blend method scores (each in [-1,1], or None if unavailable)."""
     raw = {"ta": ta, "quant": quant, "fundamental": fundamental, "council": council,
-           "ml": ml, "prediction": prediction, "tnet": tnet, "cortex": cortex}
+           "ml": ml, "prediction": prediction, "tnet": tnet, "alpha_engine": alpha_engine,
+           "cortex": cortex}
     # human-in-the-loop voice overrides (mute drops a voice; pin locks its weight)
     try:
         from . import voices as _voices
@@ -128,6 +130,7 @@ def analyze(closes: list[float], panel: dict | None = None,
             ml_score: float | None = None, use_ml: bool = True,
             prediction_score: float | None = None, use_prediction: bool = True,
             tnet_score: float | None = None, use_tnet: bool = True,
+            alpha_engine_score: float | None = None, use_alpha_engine: bool = True,
             use_cortex: bool = True,
             **gate_kwargs) -> Conviction:
     """Build TA + quant scores from histories and blend with optional
@@ -165,6 +168,12 @@ def analyze(closes: list[float], panel: dict | None = None,
             tnet_score = _tn.score_signal(symbol)
         except Exception:  # noqa: BLE001
             tnet_score = None
+    if alpha_engine_score is None and use_alpha_engine and symbol:
+        try:
+            from . import alpha_engine as _ae
+            alpha_engine_score = _ae.score_signal(symbol)
+        except Exception:  # noqa: BLE001
+            alpha_engine_score = None
     # neural core: a nonlinear fuser over the other voices (gated off until proven)
     cortex_score = None
     if use_cortex:
@@ -173,7 +182,7 @@ def analyze(closes: list[float], panel: dict | None = None,
             if _cx.enabled() and _cx.card().get("trained"):
                 _scores = {"ta": ta_score, "quant": quant_score, "fundamental": fundamental_score,
                            "ml": ml_score, "council": council_score, "prediction": prediction_score,
-                           "tnet": tnet_score}
+                           "tnet": tnet_score, "alpha_engine": alpha_engine_score}
                 _conv = _cx.conviction(_scores)
                 cortex_score = _conv["conviction"]
                 _cx.log_live(_scores, _conv)        # telemetry: record what the core thought
@@ -182,6 +191,7 @@ def analyze(closes: list[float], panel: dict | None = None,
     conv = confluence(ta=ta_score, quant=quant_score,
                       fundamental=fundamental_score, council=council_score,
                       ml=ml_score, prediction=prediction_score, tnet=tnet_score,
+                      alpha_engine=alpha_engine_score,
                       cortex=cortex_score, regime=regime, **gate_kwargs)
     if symbol:                                  # capture the 'why' for the reasoning trace
         try:

@@ -930,6 +930,18 @@ def cortex_enable(body: dict = Body(...)):
     return res
 
 
+@app.get("/api/alpha-engine")
+def alpha_engine_view(symbols: str = ""):
+    def _b():
+        from trader import alpha_engine
+        syms = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+        if not syms:
+            syms = ["SPY", "QQQ", "BTC"]
+        return {"status": alpha_engine.status(),
+                "signals": alpha_engine.signals(syms)}
+    return cached(f"alpha_engine:{symbols}", 60, _b)
+
+
 @app.get("/api/autonomy")
 def autonomy_view():
     def _b():

@@ -27,7 +27,7 @@ import time
 
 import numpy as np
 
-METHODS = ["ta", "quant", "fundamental", "ml", "council", "prediction", "tnet"]
+METHODS = ["ta", "quant", "fundamental", "ml", "council", "prediction", "tnet", "alpha_engine"]
 H1, H2 = 12, 6              # two hidden layers
 ENSEMBLE = 5               # number of seeded members
 _SEEDS = [17, 29, 43, 61, 83]
@@ -174,7 +174,10 @@ def train(min_samples: int = 30) -> dict:
     bce = float(-np.mean(ytr * np.log(ptr + 1e-9) + (1 - ytr) * np.log(1 - ptr + 1e-9)))
 
     prev = card()
-    champ = prev.get("val_acc", -1.0) if prev.get("trained") else -1.0
+    same_arch = (prev.get("arch") or [None])[0] == int(X.shape[1])
+    # champion/challenger only applies within one architecture: after a voice is
+    # added the old champion can't serve anymore, so the challenger promotes.
+    champ = prev.get("val_acc", -1.0) if prev.get("trained") and same_arch else -1.0
     promoted = val_acc >= champ
     meta = {"trained": True, "val_acc": round(val_acc, 3), "loss": round(bce, 4),
             "arch": [int(X.shape[1]), H1, H2], "members": len(members),
@@ -192,6 +195,11 @@ def conviction(scores: dict) -> dict:
     members = _load()
     if not members:
         return {"trained": False, "conviction": 0.0, "p_up": 0.5, "confidence": 0.0}
+    # arch guard: weights trained before a voice was added (input dim mismatch)
+    # must abstain, not crash -- the next train() rebuilds at the new width.
+    if int(members[0]["W1"].shape[0]) != len(METHODS):
+        return {"trained": False, "conviction": 0.0, "p_up": 0.5, "confidence": 0.0,
+                "stale_arch": True}
     x = _clean([[scores.get(m, 0.0) or 0.0 for m in METHODS]])
     ps = np.array([_fwd(x, p)[0][0] for p in members])
     pu = float(ps.mean())

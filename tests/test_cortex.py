@@ -52,7 +52,8 @@ def test_ensemble_confidence_and_saliency(tmp_path, monkeypatch):
     assert r["members"] == cortex.ENSEMBLE and r["arch"][1] == cortex.H1
     c = cortex.conviction({m: 0.5 for m in cortex.METHODS})
     assert 0.0 <= c["confidence"] <= 1.0
-    assert abs(sum(c["saliency"].values()) - 1.0) < 1e-6      # normalized importances
+    # normalized importances (each rounded to 3dp, so allow 0.0005 drift per voice)
+    assert abs(sum(c["saliency"].values()) - 1.0) <= 0.0005 * len(cortex.METHODS)
     assert c["saliency"]["ta"] > 0 and c["saliency"]["ml"] > 0  # XOR voices carry weight
 
 
