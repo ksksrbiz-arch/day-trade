@@ -30,9 +30,12 @@ def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
                   conn=None):
     """X, y, dates, syms, names. Label=1 if forward `horizon`-day return>threshold."""
     own = conn is None
-    conn = conn or connect()
-    series = _series_by_symbol(conn, min_len=lookback + horizon + 5)
-    if not series:                       # empty CRSP (cloud) -> Alpaca IEX daily bars
+    try:                                  # CRSP may be absent (cloud) -> guard it
+        conn = conn or connect()
+        series = _series_by_symbol(conn, min_len=lookback + horizon + 5)
+    except Exception:  # noqa: BLE001
+        series, own = {}, False
+    if not series:                        # empty/absent CRSP -> Alpaca IEX daily bars
         series = _series_from_alpaca(min_len=lookback + horizon + 5)
     X, y, dates, syms = [], [], [], []
     for tk, sv in series.items():
