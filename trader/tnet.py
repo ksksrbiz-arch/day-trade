@@ -886,3 +886,72 @@ if __name__ == "__main__":
     except Exception:
         pass
     print(json.dumps(forecast("AAPL"), indent=2))
+
+
+# ==================== live computation trace (for the visualizer) ========= #
+# Everything returned below is the ACTUAL computed tensor from a real forward
+# pass (down-sampled in size only) -- never synthetic or pre-baked.
+
+_TRACE_SYMBOLS = ["SPY", "QQQ", "NVDA", "TSLA", "AAPL", "MSFT"]
+
+
+def encode_trace(series: np.ndarray, max_patches: int = 24) -> dict:
+    """Run a REAL forward pass through the encoder and capture every internal:
+    per-layer attention matrix, attention entropy, per-patch latent norms, the
+    embedding activations, and the input patch means. JSON-safe."""
+    enc = encoder()
+    x = np.asarray(series, dtype=float)
+    out = {"n_patches": 0, "d_model": enc.d_model, "n_heads": enc.n_heads,
+           "n_layers": enc.n_layers, "layers": [], "embed_norms": [],
+           "patch_input": [], "pooled": [], "pooled_norm": 0.0}
+    if len(x) < enc.patch:
+        return out
+    xn, _ = revin(x)
+    P = patchify(xn, enc.patch, enc.stride)
+    if P.ndim != 2 or P.shape[0] == 0:
+        return out
+    if P.shape[0] > max_patches:
+        P = P[-max_patches:]
+    X = gelu(P @ enc.W_embed + enc.b_embed)
+    n = X.shape[0]
+    out["n_patches"] = int(n)
+    out["embed_norms"] = [round(float(v), 4) for v in np.linalg.norm(X, axis=1)]
+    out["patch_input"] = [round(float(p.mean()), 5) for p in P]
+    mask = sliding_dilated_mask(n, window=min(16, n), dilation=2)
+    for L in enc.layers:
+        A, w = enc._mha(layernorm(X), L, mask)
+        X = X + A
+        F = gelu(layernorm(X) @ L["W1"] + L["b1"]) @ L["W2"] + L["b2"]
+        X = X + F
+        out["layers"].append({
+            "attn": [[round(float(c), 4) for c in row] for row in np.asarray(w)],
+            "entropy": attention_entropy(w),
+            "latent_norms": [round(float(v), 4) for v in np.linalg.norm(X, axis=1)],
+        })
+    pooled = X.mean(axis=0)
+    out["pooled"] = [round(float(v), 4) for v in pooled]
+    out["pooled_norm"] = round(float(np.linalg.norm(pooled)), 4)
+    return out
+
+
+def live_trace(symbol: str = "SPY") -> dict:
+    """Full real trace for one symbol: encoder internals + cross-attention over
+    macro factors + directional readout. Drives the live transformer visualizer."""
+    symbol = symbol.upper()
+    x = _closes(symbol)
+    now = datetime.now(timezone.utc).isoformat()
+    if len(x) < 30:
+        return {"symbol": symbol, "ts": now, "error": "insufficient history"}
+    x = np.asarray(x, dtype=float)
+    tr = encode_trace(x[-256:])
+    cross = cross_attention(x, _macro_factors(symbol))
+    try:
+        direction = directional_readout(x)
+    except Exception:  # noqa: BLE001
+        direction = {}
+    return {"symbol": symbol, "ts": now, "last_price": round(float(x[-1]), 4),
+            "n_patches": tr["n_patches"], "d_model": tr["d_model"], "n_heads": tr["n_heads"],
+            "n_layers": tr["n_layers"], "layers": tr["layers"], "embed_norms": tr["embed_norms"],
+            "patch_input": tr["patch_input"], "pooled": tr["pooled"], "pooled_norm": tr["pooled_norm"],
+            "cross_attention": cross, "direction": direction,
+            "entropy_by_layer": [l["entropy"] for l in tr["layers"]]}

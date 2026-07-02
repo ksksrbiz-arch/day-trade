@@ -990,4 +990,37 @@ def alerts_ack(body: dict = Body(...)):
     return res
 
 
+@app.get("/api/transformer/trace")
+def transformer_trace(symbol: str = "SPY"):
+    """Real single-symbol transformer trace (encoder internals + cross-attention)."""
+    from trader import tnet
+    return tnet.live_trace(symbol)
+
+
+@app.get("/api/transformer/stream")
+async def transformer_stream():
+    """SSE: emit a REAL transformer forward-pass trace every few seconds,
+    rotating through a small symbol set. Actual computation, not pre-baked."""
+    import asyncio, json as _json
+    from fastapi.responses import StreamingResponse
+    from trader import tnet
+
+    async def gen():
+        yield "retry: 4000\n\n"
+        i = 0
+        syms = tnet._TRACE_SYMBOLS
+        while True:
+            sym = syms[i % len(syms)]; i += 1
+            try:
+                tr = await asyncio.to_thread(tnet.live_trace, sym)
+                yield "data: " + _json.dumps(tr) + "\n\n"
+            except Exception as ex:  # noqa: BLE001
+                yield "data: " + _json.dumps({"symbol": sym, "error": str(ex)[:120]}) + "\n\n"
+            await asyncio.sleep(4.0)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "Connection": "keep-alive",
+                                      "X-Accel-Buffering": "no"})
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
