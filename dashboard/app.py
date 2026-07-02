@@ -990,6 +990,29 @@ def alerts_ack(body: dict = Body(...)):
     return res
 
 
+@app.get("/api/learning")
+def learning():
+    """Self-improvement telemetry: autonomy policy + actions, ML improvement
+    curve (AUC/edge over time), and the kill-switch/circuit-breaker status."""
+    import json as _j, os as _o
+    out = {}
+    try:
+        from trader import autonomy
+        out["autonomy"] = autonomy.status()
+        out["breaker"] = autonomy.circuit_breaker_check()
+    except Exception as e:  # noqa: BLE001
+        out["autonomy"] = {"error": str(e)[:120]}
+    try:
+        from trader.ml.train import HISTORY
+        hist = _j.load(open(HISTORY)) if _o.path.exists(HISTORY) else []
+        out["ml_history"] = [{"trained_at": h.get("trained_at"), "auc": h.get("auc"),
+                              "edge": h.get("edge"), "acc": h.get("acc"),
+                              "promoted": h.get("promoted")} for h in hist[-80:]]
+    except Exception:  # noqa: BLE001
+        out["ml_history"] = []
+    return out
+
+
 @app.get("/api/transformer/trace")
 def transformer_trace(symbol: str = "SPY"):
     """Real single-symbol transformer trace (encoder internals + cross-attention)."""

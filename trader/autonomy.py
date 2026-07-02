@@ -33,14 +33,47 @@ MODES = ("off", "propose", "auto")
 
 
 # ============================ policy ====================================== #
+def _default_mode() -> str:
+    m = os.getenv("AUTONOMY", "auto").strip().lower()
+    return m if m in MODES else "auto"
+
+
 def policy() -> dict:
     try:
         with open(POLICY) as f:
             d = json.load(f)
-        return {"mode": d.get("mode", "propose"), "kill_switch": bool(d.get("kill_switch", False)),
+        return {"mode": d.get("mode", _default_mode()),
+                "kill_switch": bool(d.get("kill_switch", False)),
                 "updated": d.get("updated", "")}
     except Exception:  # noqa: BLE001
-        return {"mode": "propose", "kill_switch": False, "updated": ""}
+        return {"mode": _default_mode(), "kill_switch": False, "updated": ""}
+
+
+def circuit_breaker_check() -> dict:
+    """HARD safety rail BELOW the autonomy layer: trip the kill switch if paper
+    equity draws down past AUTONOMY_MAX_DD% from its high-water mark. Autonomy
+    cannot tune its way past this -- only a human re-enables it via set_policy."""
+    try:
+        max_dd = float(os.getenv("AUTONOMY_MAX_DD", "15"))
+        from . import config
+        from .broker import AlpacaBroker
+        from .agents import state
+        cfg = config.load()
+        if not getattr(cfg, "alpaca_key", ""):
+            return {"checked": False, "reason": "no broker keys"}
+        eq = float(AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True).account_value())
+        hw = float(state.kv_get("autonomy_hw", 0.0) or 0.0)
+        if eq > hw:
+            state.kv_set("autonomy_hw", eq); hw = eq
+        dd = (hw - eq) / hw * 100.0 if hw > 0 else 0.0
+        if dd >= max_dd and not policy()["kill_switch"]:
+            set_policy(kill_switch=True)
+            _audit({"action": "circuit_breaker", "status": "applied",
+                    "reason": f"paper drawdown {dd:.1f}% >= {max_dd}% -> AUTONOMY HALTED"})
+            return {"checked": True, "tripped": True, "dd": round(dd, 2)}
+        return {"checked": True, "tripped": False, "dd": round(dd, 2), "hw": round(hw, 2), "eq": round(eq, 2)}
+    except Exception as e:  # noqa: BLE001
+        return {"checked": False, "error": str(e)[:100]}
 
 
 def set_policy(mode: str | None = None, kill_switch: bool | None = None) -> dict:
@@ -392,6 +425,7 @@ def evaluate_all() -> list[dict]:
 
 
 def sweep() -> dict:
+    circuit_breaker_check()          # hard rail runs first, may halt autonomy
     p = policy()
     if p["kill_switch"] or p["mode"] == "off":
         return {"mode": p["mode"], "kill_switch": p["kill_switch"], "disabled": True, "results": []}

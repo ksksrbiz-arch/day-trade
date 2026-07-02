@@ -131,6 +131,29 @@ def _cortex(run_id: int) -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    # 4) periodic SELF-CRITIQUE: the reasoner audits recent activity vs edge and
+    # names what to trust less -- advisory, published to the mesh + LTM.
+    if _CORTEX_I["n"] % 6 == 0:
+        try:
+            from .. import reasoner, edge as _edge
+            recent = " | ".join(f"{i.get('layer')}/{i.get('kind')}: {i.get('text','')[:70]}"
+                                for i in mesh.recent(8))
+            try:
+                edsum = str(_edge.write_and_publish().get("counts", ""))[:180]
+            except Exception:  # noqa: BLE001
+                edsum = "n/a"
+            q = ("Recent desk activity: " + recent + " || Edge report: " + edsum +
+                 " || As a skeptical performance auditor, in 2 sentences: what is the desk"
+                 " likely getting wrong, and which signal/voice should it trust less now?")
+            crit = reasoner.reason(q, system="You audit a systematic paper-trading desk. Be concrete and honest.")
+            if crit:
+                mesh.publish("reasoning", "self_critique", crit[:400], salience=0.6)
+                _ltm.remember("Self-critique", crit[:800],
+                              dedup_key="critique-" + time.strftime("%Y-%m-%dT%H", time.gmtime()))
+                state.trace(run_id, "Performance Auditor", "critique", "self_audit", "done", 0, crit[:160])
+        except Exception:  # noqa: BLE001
+            pass
+
 
 def _predict_step(run_id: int) -> dict:
     """Prediction layer: resolve matured hypotheses, ingest new WSB ones,
