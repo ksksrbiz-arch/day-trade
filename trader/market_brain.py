@@ -230,7 +230,7 @@ def narrate(cfg, f: dict, ltm_context: str = "") -> str:
               "regime the market is in and what it implies for a small systematic trader "
               "(when to lean in vs sit out). Be concrete and skeptical; use the numbers.\n\n"
               f"STATE: {summary}\n\nRELEVANT PAST (long-term memory, may be empty): {ltm_context[:800]}")
-    for fn in ("anthropic", "groq", "openrouter", "cohere"):
+    for fn in ("groq", "cloudflare", "openrouter", "cohere"):
         try:
             return council._member_text(cfg, fn, prompt)[:700]
         except Exception:

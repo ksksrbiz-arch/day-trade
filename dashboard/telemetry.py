@@ -33,7 +33,7 @@ def l_id(name): return "l:" + slug(name)          # layer
 def c_id(name): return "c:" + slug(name)          # connector (MCP / external)
 
 
-MODELS = ["anthropic", "groq", "cohere", "cloudflare", "openrouter", "replicate", "omni"]
+MODELS = ["reasoner", "groq", "cohere", "cloudflare", "openrouter", "replicate", "omni"]
 LAYERS = ["reasoning", "brain", "prediction", "ml", "confluence", "execution", "mesh", "memory"]
 DATASTORES = [("CRSP-lite", "crsp"), ("predict.db", "predict"), ("mesh.db", "mesh"),
               ("signals.db", "signals"), ("state.db", "state"), ("LTM store", "ltm")]

@@ -8,8 +8,7 @@ chatting freely, but by each emitting a normalized {stance, confidence,
 rationale}, which pure code then tallies.
 
 Members (each optional / fail-soft):
-  * Anthropic Claude   - the news labeler's model, used here as a reasoner
-  * Groq (Llama)       - fast second opinion
+  * Groq (Llama-3.3-70B) - PRIMARY reasoner (free)
   * Cohere (Command)   - third opinion
   * Cloudflare Workers AI (Llama) - fourth opinion (needs CF account + token)
   * Omni (Clear Street)- grounded in live market/portfolio data
@@ -88,15 +87,6 @@ def _cloudflare(cfg, prompt):
     d = _http(url, {"Authorization": f"Bearer {cfg.cf_api_token}", "Content-Type": "application/json", "User-Agent": _UA},
               {"messages": [{"role": "user", "content": prompt}], "max_tokens": 120})
     txt = (d.get("result") or {}).get("response", "") if isinstance(d.get("result"), dict) else str(d.get("result", ""))
-    return _parse(txt)
-
-
-def _anthropic(cfg, prompt):
-    from anthropic import Anthropic
-    cl = Anthropic(api_key=cfg.anthropic_key)
-    m = cl.messages.create(model=cfg.model, max_tokens=120, temperature=0.0,
-                           messages=[{"role": "user", "content": prompt}])
-    txt = "".join(b.text for b in m.content if b.type == "text")
     return _parse(txt)
 
 
@@ -192,8 +182,6 @@ def convene(cfg, symbol: str, side: str, context: str = "") -> dict:
     prompt = PROMPT.format(side=("long" if side == "buy" else "short"), symbol=symbol, ctx=ctx)
     members = []
     plan = []
-    if cfg.anthropic_key:
-        plan.append(("anthropic", lambda: _anthropic(cfg, prompt)))
     if cfg.groq_key:
         plan.append(("groq", lambda: _groq(cfg, prompt)))
     if cfg.cohere_key:
@@ -280,12 +268,6 @@ def openrouter_free_models(cfg, limit: int = 40) -> list[str]:
 # ---- free-form chat per member (for deliberation) ----
 
 def _member_text(cfg, name: str, prompt: str) -> str:
-    if name == "anthropic":
-        from anthropic import Anthropic
-        m = Anthropic(api_key=cfg.anthropic_key).messages.create(
-            model=cfg.model, max_tokens=400, temperature=0.3,
-            messages=[{"role": "user", "content": prompt}])
-        return "".join(b.text for b in m.content if b.type == "text")
     if name == "groq":
         d = _http("https://api.groq.com/openai/v1/chat/completions",
                   {"Authorization": f"Bearer {cfg.groq_key}", "Content-Type": "application/json", "User-Agent": _UA},
@@ -320,7 +302,6 @@ def deliberate(cfg, question: str, symbol: str = "") -> dict:
            f"concisely and honestly (3-5 sentences), flagging uncertainty.{focus}\n\nQUESTION: {question}")
     members = []
     text_members = []
-    if cfg.anthropic_key: text_members.append("anthropic")
     if cfg.groq_key: text_members.append("groq")
     if cfg.cohere_key: text_members.append("cohere")
     if cfg.cf_account_id and cfg.cf_api_token: text_members.append("cloudflare")
@@ -349,7 +330,7 @@ def deliberate(cfg, question: str, symbol: str = "") -> dict:
         "live-data-grounded facts from omni when there's a factual conflict, and never "
         "invent numbers or recommend placing an order. Keep it tight.\n\n"
         f"USER QUESTION: {question}\n\nMEMBER RESPONSES:\n{pooled}\n\nSYNTHESIS:")
-    chair = "anthropic" if cfg.anthropic_key else (text_members[0] if text_members else None)
+    chair = text_members[0] if text_members else None
     final = ""
     if chair:
         try:

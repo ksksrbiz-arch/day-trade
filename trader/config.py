@@ -35,7 +35,7 @@ class AppConfig:
     alpaca_secret: str = ""
     alpaca_paper: bool = True
     anthropic_key: str = ""
-    model: str = "claude-sonnet-4-6"
+    model: str = "llama-3.3-70b-versatile"
     # Groq context enricher
     groq_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
@@ -157,8 +157,8 @@ def load() -> AppConfig:
         alpaca_key=os.getenv("ALPACA_API_KEY", ""),
         alpaca_secret=os.getenv("ALPACA_SECRET_KEY", ""),
         alpaca_paper=_env_bool("ALPACA_PAPER", True),
-        anthropic_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        model=os.getenv("LLM_MODEL", "claude-sonnet-4-6"),
+        anthropic_key="",  # Anthropic removed; field kept dormant for back-compat
+        model=os.getenv("LLM_MODEL", "llama-3.3-70b-versatile"),
         groq_key=os.getenv("GROQ_API_KEY", ""),
         groq_model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
         massive_access=os.getenv("MASSIVE_ACCESS_KEY", ""),

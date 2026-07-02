@@ -410,8 +410,7 @@ def main() -> None:
             pass
 
     missing = [n for n, v in [("ALPACA_API_KEY", cfg.alpaca_key),
-                              ("ALPACA_SECRET_KEY", cfg.alpaca_secret),
-                              ("ANTHROPIC_API_KEY", cfg.anthropic_key)] if not v]
+                              ("ALPACA_SECRET_KEY", cfg.alpaca_secret)] if not v]
     if missing and cfg.strategy.mode == "news":
         raise SystemExit(f"Missing env vars: {', '.join(missing)}")
     if not cfg.alpaca_paper:
@@ -419,7 +418,7 @@ def main() -> None:
 
     broker = AlpacaBroker(cfg.alpaca_key, cfg.alpaca_secret, paper=True)
     mode = cfg.strategy.mode
-    labeler = Labeler(cfg.anthropic_key, cfg.model) if mode in ("news", "daytrader") else None
+    labeler = Labeler() if mode in ("news", "daytrader") else None
 
     md = groq = None
     need_md = cfg.strategy.require_confirmation or mode in ("scalper", "daytrader") or cfg.strategy.use_ofi
