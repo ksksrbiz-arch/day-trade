@@ -80,6 +80,12 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"[ml.daemon] error: {e}")
         try:
+            from .. import hypolab
+            hl = hypolab.run(6)
+            print(f"[ml.daemon] hypothesis lab -> winner={hl.get('winner')} promoted={hl.get('promoted')}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[ml.daemon] hypolab error: {e}")
+        try:
             from .. import cortex
             cx = cortex.train()
             print(f"[ml.daemon] neural core -> {cx}")

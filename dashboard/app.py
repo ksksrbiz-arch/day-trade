@@ -1010,6 +1010,11 @@ def learning():
                               "promoted": h.get("promoted")} for h in hist[-80:]]
     except Exception:  # noqa: BLE001
         out["ml_history"] = []
+    try:
+        from trader import hypolab
+        out["hypotheses"] = hypolab.latest()
+    except Exception:  # noqa: BLE001
+        out["hypotheses"] = {}
     return out
 
 

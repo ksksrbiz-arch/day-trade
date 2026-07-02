@@ -15,6 +15,7 @@ type Learning = {
   autonomy?: { policy?: { mode?: string; kill_switch?: boolean }; recent?: Audit[]; actions?: any[] };
   breaker?: { tripped?: boolean; dd?: number; eq?: number; hw?: number };
   ml_history?: MlPoint[];
+  hypotheses?: { baseline_vs_benchmark?: number; winner?: boolean; promoted?: any; leaderboard?: any[] };
 };
 
 const CYAN = "#35e0d8";
@@ -80,6 +81,7 @@ export default function LearningPanel() {
   const last = hist[hist.length - 1] || {};
   const audits = (d?.autonomy?.recent || []).slice(0, 5);
   const modeColor = kill ? RED : mode === "AUTO" ? CYAN : AMBER;
+  const hypo = d?.hypotheses;
 
   return (
     <div style={panel}>
@@ -115,6 +117,23 @@ export default function LearningPanel() {
           <span style={{ color: "#788" }}> — {(a.reason || "").slice(0, 60)}</span>
         </div>
       ))}
+
+      {hypo && (hypo.leaderboard || []).length > 0 && (
+        <>
+          <div style={{ ...sec, marginTop: 10 }}>
+            STRATEGY DISCOVERY {hypo.promoted ? <span style={{ color: CYAN }}>· PROMOTED</span> : <span style={{ color: "#788" }}>· testing</span>}
+          </div>
+          {(hypo.leaderboard || []).slice(0, 3).map((r: any, i: number) => (
+            <div key={i} style={{ fontSize: 10, marginBottom: 2, color: r.name === "baseline" ? "#889" : "#bcd" }}>
+              <span style={{ color: (r.vs_benchmark ?? 0) > 0 ? CYAN : RED }}>
+                {(r.vs_benchmark >= 0 ? "+" : "")}{(r.vs_benchmark ?? 0).toFixed?.(3)}
+              </span>
+              <span> {String(r.name).slice(0, 22)}</span>
+              <span style={{ color: "#677" }}> ({r.trades}t)</span>
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
