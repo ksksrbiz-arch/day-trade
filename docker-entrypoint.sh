@@ -24,6 +24,9 @@ if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   python -m trader.agents.runtime --loop --every 900 >> data/agents.log 2>&1 &
   python -m trader.agents.supervisor --loop --every 120 >> data/sup.log 2>&1 &
   python -m trader.exits >> data/exits.log 2>&1 &
+  # ML: train an initial model now (fast, Alpaca-backed) + keep it improving
+  python -m trader.ml.train >> data/ml_train.log 2>&1 &
+  python -m trader.ml.daemon --every 6 >> data/ml.log 2>&1 &
 fi
 
 echo "[entrypoint] starting API on 0.0.0.0:${PORT:-8000}"

@@ -32,6 +32,8 @@ def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
     own = conn is None
     conn = conn or connect()
     series = _series_by_symbol(conn, min_len=lookback + horizon + 5)
+    if not series:                       # empty CRSP (cloud) -> Alpaca IEX daily bars
+        series = _series_from_alpaca(min_len=lookback + horizon + 5)
     X, y, dates, syms = [], [], [], []
     for tk, sv in series.items():
         closes = [c for _, c in sv]
@@ -67,3 +69,44 @@ if __name__ == "__main__":
           f"({(100*pos/len(y) if y else 0):.1f}%)  symbols={len(set(s))}")
     if d:
         print("date range:", min(d), "->", max(d))
+
+
+# --- cloud fallback: build training series from Alpaca IEX daily bars when the
+# local CRSP price cache is empty (e.g. a fresh container). Cached per process. ---
+_ALP_UNIVERSE = ["SPY", "QQQ", "IWM", "DIA", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
+                 "META", "TSLA", "JPM", "XOM", "UNH", "GLD", "TLT", "HYG", "AMD",
+                 "NFLX", "BAC", "WMT", "COST", "AVGO", "CRM"]
+_ALP_SERIES_CACHE = {"ts": 0.0, "val": None}
+
+
+def _alpaca_series(sym, limit=400):
+    import os, json, datetime, urllib.request, urllib.parse
+    k = os.environ.get("ALPACA_API_KEY", ""); sec = os.environ.get("ALPACA_SECRET_KEY", "")
+    if not k or not sec:
+        return []
+    try:
+        start = (datetime.date.today() - datetime.timedelta(days=700)).isoformat()
+        q = urllib.parse.urlencode({"timeframe": "1Day", "limit": limit, "adjustment": "raw",
+                                    "feed": "iex", "start": start})
+        req = urllib.request.Request(f"https://data.alpaca.markets/v2/stocks/{sym}/bars?{q}",
+                                     headers={"APCA-API-KEY-ID": k, "APCA-API-SECRET-KEY": sec,
+                                              "User-Agent": "Mozilla/5.0"})
+        d = json.loads(urllib.request.urlopen(req, timeout=20).read())
+        return [(b["t"][:10], b["c"]) for b in (d.get("bars") or []) if "c" in b and "t" in b]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _series_from_alpaca(min_len):
+    import time as _t
+    if _ALP_SERIES_CACHE["val"] is not None and (_t.time() - _ALP_SERIES_CACHE["ts"]) < 3600:
+        base = _ALP_SERIES_CACHE["val"]
+    else:
+        base = {}
+        for sym in _ALP_UNIVERSE:
+            sv = _alpaca_series(sym)
+            if len(sv) >= min_len:
+                base[sym] = sv
+        _ALP_SERIES_CACHE["ts"] = _t.time(); _ALP_SERIES_CACHE["val"] = base
+    return dict(base)
+

@@ -194,7 +194,7 @@ def convene(cfg, symbol: str, side: str, context: str = "") -> dict:
         plan.append(("openrouter", lambda: _openrouter(cfg, prompt)))
     if cfg.clearstreet_token and cfg.cs_account_id:
         plan.append(("omni", lambda: _omni(cfg, symbol, side)))
-    for name, fn in plan:
+    def _run_member(name, fn):
         try:
             _fb = (lambda: _groq(cfg, prompt)) if (name != "groq" and cfg.groq_key) else None
             _r = _rcall(fn, kind="llm", budget_s=40, fallback=_fb)
@@ -202,10 +202,15 @@ def convene(cfg, symbol: str, side: str, context: str = "") -> dict:
                 raise RuntimeError(_r["error"] or "failed")
             v = _r["value"]; v["source"] = name; v["ok"] = True
             v["attempts"] = _r["attempts"]; v["fell_back"] = _r["fell_back"]
-            members.append(v)
+            return v
         except Exception as e:
-            members.append({"source": name, "ok": False, "stance": None,
-                            "confidence": 0.0, "rationale": str(e)[:120]})
+            return {"source": name, "ok": False, "stance": None,
+                    "confidence": 0.0, "rationale": str(e)[:120]}
+    # run members CONCURRENTLY (was sequential) -- big latency win, order preserved
+    from concurrent.futures import ThreadPoolExecutor
+    if plan:
+        with ThreadPoolExecutor(max_workers=min(8, len(plan))) as _ex:
+            members = list(_ex.map(lambda nf: _run_member(*nf), plan))
     try:
         from .ml import agent_reliability as _ar
         _ar.log_votes(symbol, side, members)
@@ -330,9 +335,20 @@ def deliberate(cfg, question: str, symbol: str = "") -> dict:
         "live-data-grounded facts from omni when there's a factual conflict, and never "
         "invent numbers or recommend placing an order. Keep it tight.\n\n"
         f"USER QUESTION: {question}\n\nMEMBER RESPONSES:\n{pooled}\n\nSYNTHESIS:")
-    chair = text_members[0] if text_members else None
+    # high-stakes: synthesize with self-consistency (sample 3, majority-vote)
+    chair = "reasoner:self-consistency"
     final = ""
-    if chair:
+    try:
+        from . import reasoner
+        final = reasoner.reason_consistent(
+            "You are the CHAIR of a multi-model trading research council. "
+            "Synthesize ONE clear, honest answer; prefer live-data-grounded facts; "
+            "never invent numbers or recommend placing an order.",
+            chair_prompt, n=3).strip()
+    except Exception:  # noqa: BLE001
+        final = ""
+    if not final and text_members:  # fallback to a single member
+        chair = text_members[0]
         try:
             final = _member_text(cfg, chair, chair_prompt).strip()
         except Exception as e:

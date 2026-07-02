@@ -37,6 +37,7 @@ import os
 import time
 from datetime import datetime, timezone
 
+import functools
 import numpy as np
 
 rng = np.random.default_rng(7)  # fixed init -> deterministic forward pass
@@ -195,6 +196,7 @@ def multi_freq_heads(series: np.ndarray) -> dict:
 
 
 # ==================== masks + attention =================================== #
+@functools.lru_cache(maxsize=128)
 def sliding_dilated_mask(n: int, window: int = 16, dilation: int = 2) -> np.ndarray:
     """Boolean (n,n) attend-mask: each query attends to the last `window` ticks
     AND exponentially-spaced older pivots — local focus + sparse long memory."""
@@ -728,7 +730,7 @@ def _macro_factors(symbol: str) -> dict:
 
 def analyze(symbol: str) -> dict:
     symbol = symbol.upper()
-    x = _closes(symbol)
+    x = _resilient_closes(symbol)
     if len(x) < 30:
         return {"symbol": symbol, "error": "insufficient history"}
     x = np.asarray(x, dtype=float)
@@ -769,7 +771,7 @@ def forecast(symbol: str, horizon: int = 5) -> dict:
     """Calibrated, decision-useful read: direction, probability, expected move,
     quantile band, drivers, regime, and confidence. Fail-soft."""
     symbol = symbol.upper()
-    x = _closes(symbol)
+    x = _resilient_closes(symbol)
     if len(x) < 30:
         return {"symbol": symbol, "error": "insufficient history"}
     x = np.nan_to_num(np.asarray(x, dtype=float), nan=0.0)
@@ -934,10 +936,17 @@ def encode_trace(series: np.ndarray, max_patches: int = 24) -> dict:
     return out
 
 
-def live_trace(symbol: str = "SPY") -> dict:
+_LIVE_TRACE_CACHE: dict = {}
+
+
+def live_trace(symbol: str = "SPY", ttl: float = 12.0) -> dict:
     """Full real trace for one symbol: encoder internals + cross-attention over
-    macro factors + directional readout. Drives the live transformer visualizer."""
+    macro factors + directional readout. Drives the live transformer visualizer.
+    Cached `ttl` seconds so repeated SSE ticks stay cheap."""
     symbol = symbol.upper()
+    _hit = _LIVE_TRACE_CACHE.get(symbol)
+    if _hit and (_time.time() - _hit[0]) < ttl:
+        return _hit[1]
     x = _resilient_closes(symbol)
     now = datetime.now(timezone.utc).isoformat()
     if len(x) < 30:
@@ -949,12 +958,14 @@ def live_trace(symbol: str = "SPY") -> dict:
         direction = directional_readout(x)
     except Exception:  # noqa: BLE001
         direction = {}
-    return {"symbol": symbol, "ts": now, "last_price": round(float(x[-1]), 4),
+    _out = {"symbol": symbol, "ts": now, "last_price": round(float(x[-1]), 4),
             "n_patches": tr["n_patches"], "d_model": tr["d_model"], "n_heads": tr["n_heads"],
             "n_layers": tr["n_layers"], "layers": tr["layers"], "embed_norms": tr["embed_norms"],
             "patch_input": tr["patch_input"], "pooled": tr["pooled"], "pooled_norm": tr["pooled_norm"],
             "cross_attention": cross, "direction": direction,
             "entropy_by_layer": [l["entropy"] for l in tr["layers"]]}
+    _LIVE_TRACE_CACHE[symbol] = (_time.time(), _out)
+    return _out
 
 
 # --- resilient closes: fall back to Alpaca IEX daily bars when the local CRSP

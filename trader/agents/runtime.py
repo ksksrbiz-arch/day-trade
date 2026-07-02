@@ -24,6 +24,7 @@ import sys
 import time
 
 from . import orchestrator as orch
+from .. import council
 from . import state, governor, memory, tools, cloudflare as cf
 
 KIND = "autonomy"
@@ -68,9 +69,67 @@ def _mesh_step(run_id: int) -> dict:
         summ = f"published {out.get('published')} cross-layer insights"
     except Exception as e:  # noqa: BLE001
         out = {"error": str(e)[:120]}; summ = out["error"]
+    # tie the transformer + council + LTM directly into the mesh each cycle
+    try:
+        _cortex(run_id)
+    except Exception as e:  # noqa: BLE001
+        pass
     state.trace(run_id, "Mesh", "mesh", "snapshot", "done",
                 int((_t.time() - t0) * 1000), summ)
     return {"agent": "Mesh", "tool": "mesh", "status": "done", "out": out}
+
+
+_CORTEX_I = {"n": 0}
+
+
+def _cortex(run_id: int) -> None:
+    """Direct-mesh integration: run the TRANSFORMER read + reasoning COUNCIL on a
+    rotating focus symbol, recall prior context from the durable LTM, and publish
+    everything back into the mesh + LTM so all reasoners share it. Fail-soft."""
+    from .. import mesh, tnet, config
+    from .. import ltm as _ltm
+    syms = WATCH
+    sym = syms[_CORTEX_I["n"] % len(syms)]; _CORTEX_I["n"] += 1
+    cfg = config.load()
+
+    # 1) transformer read (real forward pass) -> mesh + LTM
+    tdir = "flat"; drivers = ""
+    try:
+        tr = tnet.live_trace(sym)
+        if not tr.get("error"):
+            ca = tr.get("cross_attention", {}) or {}
+            dom = ca.get("dominant")
+            ent = tr.get("entropy_by_layer", [])
+            d = (tr.get("direction") or {})
+            tdir = d.get("bias") or ("up" if (d.get("prob_up", 0.5) or 0.5) >= 0.5 else "down")
+            drivers = f"driver={dom} entropy={ent} dir={tdir}"
+            mesh.publish("brain", "transformer", f"{sym}: {drivers}", symbol=sym, salience=0.55)
+            state.trace(run_id, "Transformer", "tnet", "encode", "done", 0, f"{sym}: {drivers}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2) LTM recall -> mesh (shared history/context for every reasoner)
+    recall = ""
+    try:
+        recall = _ltm.ask(f"prior reads and outcomes for {sym}", [sym, "transformer", "council"])
+        if recall:
+            mesh.publish("memory", "recall", f"{sym} LTM: {recall[:400]}", symbol=sym, salience=0.4)
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 3) council (parallel) -> already publishes consensus to mesh; persist to LTM
+    try:
+        side = "buy" if tdir in ("up", "bull", "bullish") else "sell"
+        res = council.convene(cfg, sym, side)
+        con = res.get("consensus"); agr = res.get("agreement"); act = res.get("decision", {}).get("action")
+        state.trace(run_id, "Council", "council", "convene", "done", 0,
+                    f"{sym} {side}: {con} ({agr}) -> {act}")
+        _ltm.remember(
+            f"Cortex read {sym}",
+            f"transformer[{drivers}] council[{con} {agr} -> {act}] recall[{recall[:200]}]",
+            dedup_key=f"cortex-{sym}-{time.strftime('%Y-%m-%dT%H', time.gmtime())}")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _predict_step(run_id: int) -> dict:
@@ -198,6 +257,12 @@ def _reflection_step(run_id: int, results: list[dict]) -> dict:
     lesson = cf.summarize(digest) if (cf.available() and lines) else digest[:280]
     try:
         memory.remember("LESSON: " + lesson, {"kind": "reflection"})
+        try:
+            from .. import ltm as _ltm
+            _ltm.remember("Cycle lesson", lesson,
+                          dedup_key="lesson-" + time.strftime("%Y-%m-%dT%H:%M", time.gmtime()))
+        except Exception:  # noqa: BLE001
+            pass
         state.kv_set("last_reflection", {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                                          "lesson": lesson, "n_actions": len(acted)})
     except Exception:  # noqa: BLE001

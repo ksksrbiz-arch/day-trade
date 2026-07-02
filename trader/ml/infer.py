@@ -54,6 +54,9 @@ def score_symbol(symbol: str, ttl: float = 300) -> float | None:
         from ..crsp import query as crsp
         bars = crsp.get_prices(symbol, "2024-01-01", None)
         closes = [b["close"] for b in bars if b.get("close")]
+        if len(closes) < 60:             # empty/short CRSP (cloud) -> Alpaca IEX bars
+            from .. import tnet
+            closes = tnet._alpaca_closes(symbol)
         s = score_from_closes(closes)
     except Exception:  # noqa: BLE001
         s = None

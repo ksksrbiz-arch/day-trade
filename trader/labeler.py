@@ -53,7 +53,7 @@ class Labeler:
     def label(self, item: dict) -> Optional[Label]:
         content = f"HEADLINE: {item.get('title','')}\n\nSUMMARY: {item.get('summary','')}"
         try:
-            raw = reasoner.reason_json(SYSTEM_PROMPT, content, max_tokens=400)
+            raw = reasoner.reason_json(SYSTEM_PROMPT, content, max_tokens=400, cache_ttl=600)
         except Exception as e:  # network/api errors must not kill the loop
             print(f"[labeler] reasoner error: {str(e)[:120]}")
             return None

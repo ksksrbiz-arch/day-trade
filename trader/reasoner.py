@@ -124,17 +124,42 @@ def _providers(e):
 
 _LAST_PROVIDER = {"name": ""}
 
+# optional in-memory TTL response cache (keyed by the full request signature).
+import time as _time
+_CACHE: dict = {}
+
+
+def _cache_get(key, ttl):
+    hit = _CACHE.get(key)
+    if hit and (_time.time() - hit[0]) < ttl:
+        return hit[1]
+    return None
+
 
 def complete(system: str, user: str, json_mode: bool = False, max_tokens: int = 500,
-             temperature: float = 0.2, cfg=None) -> str:
-    """Chat completion across the free-model fallback chain. Returns '' if all fail."""
+             temperature: float = 0.2, cfg=None, cache_ttl: float = 0.0) -> str:
+    """Chat completion across the free-model fallback chain. Returns '' if all fail.
+    If cache_ttl>0, identical requests are served from an in-memory cache."""
+    ckey = None
+    if cache_ttl > 0:
+        ckey = (system, user, json_mode, max_tokens, round(temperature, 2))
+        c = _cache_get(ckey, cache_ttl)
+        if c is not None:
+            _LAST_PROVIDER["name"] = "cache"
+            return c
     e = _env(cfg)
     for name, fn in _providers(e):
         try:
             out = fn(e, system, user, json_mode, max_tokens, temperature)
             if out and out.strip():
                 _LAST_PROVIDER["name"] = name
-                return out.strip()
+                val = out.strip()
+                if ckey is not None:
+                    _CACHE[ckey] = (_time.time(), val)
+                    if len(_CACHE) > 512:
+                        for k in list(_CACHE)[:128]:
+                            _CACHE.pop(k, None)
+                return val
         except Exception as ex:  # noqa: BLE001
             print(f"[reasoner] {name} failed, trying next: {str(ex)[:110]}")
             continue
@@ -154,10 +179,12 @@ def reason(task: str, system: str = "", max_tokens: int = 600, temperature: floa
     return _final(complete(sys, task, max_tokens=max_tokens, temperature=temperature, cfg=cfg))
 
 
-def reason_json(system: str, user: str, max_tokens: int = 500, cfg=None) -> str:
+def reason_json(system: str, user: str, max_tokens: int = 500, cfg=None,
+                cache_ttl: float = 0.0) -> str:
     """Deliberate reasoning that returns JSON-only text (caller parses)."""
     sys = (system + "\n\n" + JSON_SCAFFOLD).strip()
-    return complete(sys, user, json_mode=True, max_tokens=max_tokens, temperature=0.0, cfg=cfg)
+    return complete(sys, user, json_mode=True, max_tokens=max_tokens, temperature=0.0,
+                    cfg=cfg, cache_ttl=cache_ttl)
 
 
 def reason_consistent(system: str, user: str, n: int = 3, max_tokens: int = 500, cfg=None) -> str:
