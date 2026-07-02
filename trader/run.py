@@ -148,6 +148,31 @@ def _day_inc():
     _day_state["n"] += 1
 
 
+def _risk_scale(cfg):
+    """Bet in proportion to MEASURED edge + regime -- the honest anti-bleed rule.
+    Near-zero measured edge => near-minimum size; stressed tape => cut further."""
+    scale, why = 1.0, []
+    try:
+        from .market_brain import cached_regime
+        rg = cached_regime("neutral")
+        if rg == "high_vol":
+            scale *= 0.5; why.append("high_vol x0.5")
+        elif rg == "risk_off":
+            scale *= 0.7; why.append("risk_off x0.7")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from .ml import infer
+        edge = float(infer.model_card().get("edge", 0.0) or 0.0)
+        if edge <= 0.0:
+            scale *= 0.3; why.append("no-edge x0.3")
+        elif edge < 0.03:
+            scale *= 0.6; why.append("thin-edge x0.6")
+    except Exception:  # noqa: BLE001
+        pass
+    return max(0.1, round(scale, 3)), ", ".join(why) or "full size"
+
+
 def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
     """Route a confirmed Intent to options (1 ATM contract) or equity bracket.
     Returns (order_id, instrument, exec_symbol, note)."""
@@ -163,6 +188,12 @@ def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
     if _v["decision"] != "approve":
         return None, _instr, intent.symbol, "POLICY-" + _v["decision"] + ": " + "; ".join(_v["reasons"])[:110]
     _day_inc()
+    _sc, _why = _risk_scale(cfg)
+    if _sc < 1.0:
+        try:
+            intent.notional = round(float(intent.notional) * _sc, 2)
+        except Exception:
+            pass
     if cfg.strategy.use_options and optbroker is not None:
         contract, spot = optbroker.choose(intent.symbol, intent.side)
         if contract is None:
