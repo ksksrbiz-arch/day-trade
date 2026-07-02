@@ -938,13 +938,13 @@ def live_trace(symbol: str = "SPY") -> dict:
     """Full real trace for one symbol: encoder internals + cross-attention over
     macro factors + directional readout. Drives the live transformer visualizer."""
     symbol = symbol.upper()
-    x = _closes(symbol)
+    x = _resilient_closes(symbol)
     now = datetime.now(timezone.utc).isoformat()
     if len(x) < 30:
         return {"symbol": symbol, "ts": now, "error": "insufficient history"}
     x = np.asarray(x, dtype=float)
     tr = encode_trace(x[-256:])
-    cross = cross_attention(x, _macro_factors(symbol))
+    cross = cross_attention(x, _resilient_macro(symbol))
     try:
         direction = directional_readout(x)
     except Exception:  # noqa: BLE001
@@ -955,3 +955,56 @@ def live_trace(symbol: str = "SPY") -> dict:
             "patch_input": tr["patch_input"], "pooled": tr["pooled"], "pooled_norm": tr["pooled_norm"],
             "cross_attention": cross, "direction": direction,
             "entropy_by_layer": [l["entropy"] for l in tr["layers"]]}
+
+
+# --- resilient closes: fall back to Alpaca IEX daily bars when the local CRSP
+# store is empty (e.g. a fresh cloud container). Cached 15 min. ---
+import time as _time
+import urllib.parse as _uparse
+_ALP_CACHE: dict = {}
+
+
+def _alpaca_closes(symbol: str, limit: int = 250) -> list:
+    import os as _os
+    key = f"{symbol}:{limit}"
+    hit = _ALP_CACHE.get(key)
+    if hit and (_time.time() - hit[0]) < 900:
+        return hit[1]
+    k = _os.environ.get("ALPACA_API_KEY", ""); sec = _os.environ.get("ALPACA_SECRET_KEY", "")
+    if not k or not sec:
+        return []
+    try:
+        import datetime as _dt, json as _json, urllib.request as _ur
+        start = (_dt.date.today() - _dt.timedelta(days=400)).isoformat()
+        q = _uparse.urlencode({"timeframe": "1Day", "limit": limit, "adjustment": "raw",
+                               "feed": "iex", "start": start})
+        req = _ur.Request(f"https://data.alpaca.markets/v2/stocks/{symbol}/bars?{q}",
+                          headers={"APCA-API-KEY-ID": k, "APCA-API-SECRET-KEY": sec,
+                                   "User-Agent": "Mozilla/5.0"})
+        d = _json.loads(_ur.urlopen(req, timeout=15).read())
+        c = [b["c"] for b in (d.get("bars") or []) if "c" in b]
+        _ALP_CACHE[key] = (_time.time(), c)
+        return c
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _resilient_closes(symbol: str) -> list:
+    c = _closes(symbol)
+    if len(c) >= 30 or "/" in symbol:
+        return c
+    return _alpaca_closes(symbol)
+
+
+def _resilient_macro(symbol: str) -> dict:
+    factors = _macro_factors(symbol)
+    if factors:
+        return factors
+    out = {}
+    for m, name in _MACROS.items():
+        if m == symbol:
+            continue
+        c = _alpaca_closes(m)
+        if len(c) >= 30:
+            out[name] = c
+    return out
