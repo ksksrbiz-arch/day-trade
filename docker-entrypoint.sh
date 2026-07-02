@@ -5,6 +5,20 @@
 set -e
 mkdir -p data
 
+# Load hosted secrets (Render Secret File / etc.) from wherever the platform
+# mounted them, exporting every KEY=VALUE into the environment for the API AND
+# the daemons. Covers Render's known mount paths.
+for _f in /etc/secrets/.env /opt/render/project/src/.env /app/.env /.env; do
+  if [ -f "$_f" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$_f"
+    set +a
+    echo "[entrypoint] loaded secrets from $_f"
+    break
+  fi
+done
+
 if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   echo "[entrypoint] starting background daemons (RUN_DAEMONS=1)"
   python -m trader.agents.runtime --loop --every 900 >> data/agents.log 2>&1 &
