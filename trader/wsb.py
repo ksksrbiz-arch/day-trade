@@ -17,8 +17,9 @@ import time
 import urllib.request
 
 DEFAULT_URL = os.environ.get(
-    "WSB_RSS_URL", "https://rss.app/feeds/S9iXtNCjhNAk5trl.xml")
-_UA = "Mozilla/5.0 (paper-trader wsb)"
+    "WSB_RSS_URL", "https://old.reddit.com/r/wallstreetbets/hot/.rss")
+_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+_FALLBACK_URL = "https://old.reddit.com/r/wallstreetbets/hot/.rss"
 _cache: dict[str, tuple] = {}
 
 # words that look like tickers but aren't
@@ -39,7 +40,18 @@ def _strip(t: str) -> str:
 
 
 def _item_blocks(xml: str):
-    return re.findall(r"<item>(.*?)</item>", xml, re.DOTALL)
+    blocks = re.findall(r"<item>(.*?)</item>", xml, re.DOTALL)
+    if not blocks:                       # Atom feed (Reddit) uses <entry>
+        blocks = re.findall(r"<entry>(.*?)</entry>", xml, re.DOTALL)
+    return blocks
+
+
+def _link(block: str) -> str:
+    # RSS: <link>URL</link> ; Atom: <link href="URL" .../>
+    m = re.search(r"<link[^>]*href=\"([^\"]+)\"", block)
+    if m:
+        return m.group(1)
+    return _field(block, "link")
 
 
 def _field(block: str, tag: str) -> str:
@@ -56,18 +68,28 @@ def fetch_items(url: str | None = None, limit: int = 30, ttl: float = 300):
     now = time.time()
     if url in _cache and now - _cache[url][0] < ttl:
         return _cache[url][1]
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    def _pull(u):
+        req = urllib.request.Request(u, headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=20) as r:
-            xml = r.read().decode("utf-8", "replace")
-    except Exception as e:  # noqa: BLE001
-        return [{"title": f"[wsb feed error: {str(e)[:80]}]", "link": "", "ts": ""}]
+            return r.read().decode("utf-8", "replace")
+
+    xml = ""
+    for u in [url] + ([_FALLBACK_URL] if url != _FALLBACK_URL else []):
+        try:
+            xml = _pull(u)
+            if _item_blocks(xml):
+                url = u
+                break
+        except Exception:  # noqa: BLE001
+            continue
+    if not _item_blocks(xml):
+        return [{"title": "[wsb feed error: no items from feed or fallback]", "link": "", "ts": ""}]
     items = []
     for b in _item_blocks(xml)[:limit]:
         items.append({"title": _field(b, "title"),
-                      "link": _field(b, "link"),
-                      "ts": _field(b, "pubDate"),
-                      "summary": _field(b, "description")[:200]})
+                      "link": _link(b),
+                      "ts": _field(b, "pubDate") or _field(b, "updated"),
+                      "summary": (_field(b, "description") or _field(b, "content"))[:200]})
     _cache[url] = (now, items)
     return items
 

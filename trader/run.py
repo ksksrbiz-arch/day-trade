@@ -486,6 +486,11 @@ def main() -> None:
                     run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni)
                 else:
                     run_news(cfg, labeler, broker, md, groq, cs, optbroker, omni)
+            try:                              # beta-capture floor: track the index when flat
+                from . import beta
+                beta.rebalance(cfg, broker)
+            except Exception:  # noqa: BLE001
+                pass
         except KeyboardInterrupt:
             print("\nstopped."); break
         except Exception as e:

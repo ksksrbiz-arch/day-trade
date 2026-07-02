@@ -90,6 +90,24 @@ class AlpacaBroker:
             print(f"[broker] order failed for {intent.symbol}: {e}")
             return None
 
+    def buy_plain(self, symbol: str, notional: float):
+        """Plain market BUY, NO bracket -- for a core beta position you intend to
+        hold (not auto-close). Paper-only, fail-soft."""
+        try:
+            price = self.last_price(symbol)
+            if not price or notional < price:
+                return None
+            qty = max(1, int(notional // price))
+            order = MarketOrderRequest(symbol=symbol, qty=qty, side=OrderSide.BUY,
+                                       time_in_force=TimeInForce.DAY,
+                                       client_order_id=f"beta-{uuid.uuid4().hex[:10]}")
+            resp = self.trading.submit_order(order)
+            print(f"[broker] BETA buy {qty} {symbol} @~{price}")
+            return str(resp.id)
+        except Exception as e:  # noqa: BLE001
+            print(f"[broker] beta buy failed for {symbol}: {e}")
+            return None
+
     def cancel_all_orders(self) -> int:
         """Cancel every open order (used by the daily circuit breaker)."""
         try:
