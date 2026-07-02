@@ -34,7 +34,7 @@ if not os.path.exists(_PY):
 SERVICES = {
     "dashboard":  ("dashboard.app:app",
                    ["-m", "uvicorn", "dashboard.app:app", "--host", "127.0.0.1", "--port", "8000"],
-                   "dash", "http://127.0.0.1:" + os.environ.get("PORT", "8000") + "/api/health/full"),
+                   "dash", None),   # Render owns the web process (PID 1); detect only, never heal
     "exits":      ("trader.exits", ["-m", "trader.exits"], "exits", None),
     "optimizer":  ("dashboard.optimizer", ["-m", "dashboard.optimizer", "--daemon"], "opt", None),
     "autotuner":  ("dashboard.autotuner", ["-m", "dashboard.autotuner"], "at", None),
@@ -188,6 +188,8 @@ def check_and_heal(heal: bool = True) -> dict:
         present = match in cmd
         healthy = present and (_http_ok(health_url) if health_url else True)
         status[name] = healthy
+        if name == "dashboard":
+            continue          # never heal the Render-managed web process
         if not healthy and heal:
             if _crash_looping(name):          # too many recent restarts -> back off, alert
                 status[name] = "crash_loop"
@@ -239,12 +241,4 @@ def main():
     while True:
         h = check_and_heal(heal=heal)
         down = [k for k, v in h["services"].items() if not v]
-        print(f"[supervisor] up={sum(h['services'].values())}/{len(h['services'])} "
-              f"down={down} restarted={h['restarted']}")
-        if not loop:
-            break
-        time.sleep(every)
-
-
-if __name__ == "__main__":
-    main()
+      

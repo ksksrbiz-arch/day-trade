@@ -194,8 +194,12 @@ def run_agent(agent: dict) -> dict:
 
     tool = act.get("tool")
     if tool not in allowed:
-        return {"agent": name, "thought": thought, "tool": None,
-                "note": f"no valid tool ({tool})"}
+        # keep every agent contributing: default to its primary (read-only) tool
+        # rather than sitting the turn out, so the whole mesh stays live.
+        tool = allowed[0] if allowed else None
+        if tool is None:
+            return {"agent": name, "thought": thought, "tool": None, "note": "no tools"}
+        thought = (thought + f" [defaulted to {tool}]")[:200]
     args = act.get("args") or {}
     if not isinstance(args, dict):
         args = {}
@@ -237,12 +241,4 @@ def main():
     print(f"[agents] roster={[a['name'] for a in ROSTER]} loop={loop} every={every}s")
     while True:
         res = run_round()
-        for r in res:
-            print(f"  [{r.get('agent')}] tool={r.get('tool')} :: {str(r.get('result', r.get('note','')))[:110]}")
-        if not loop:
-            break
-        time.sleep(every)
-
-
-if __name__ == "__main__":
-    main()
+  
