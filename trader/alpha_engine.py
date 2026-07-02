@@ -30,7 +30,7 @@ _cache: dict[str, tuple[float, dict | None]] = {}
 
 
 def base_url() -> str:
-    return os.getenv("ALPHA_ENGINE_URL", "http://localhost:8000").rstrip("/")
+    return os.getenv("ALPHA_ENGINE_URL", "https://prediction-alpha-engine.onrender.com").rstrip("/")
 
 
 def enabled() -> bool:
