@@ -115,8 +115,20 @@ def _vercel_complete(prompt: str, model: str = None, timeout: int = 30) -> str:
         return f"[vercel error {str(e)[:60]}]"
 
 def _complete(provider: str, prompt: str, model: str = None) -> str:
-    if provider == "cloudflare":
-        return cf.chat(prompt, max_tokens=300, temperature=0.2)
+    # Route every agent through the unified reasoner (Groq -> Cloudflare ->
+    # OpenRouter, JSON mode) so each reliably returns a parseable {thought,tool,
+    # args} action -- fixes agents that previously returned no tool. Legacy
+    # provider calls remain as a last-resort fallback.
+    try:
+        from .. import reasoner
+        out = reasoner.complete(
+            "You are a disciplined trading-desk agent. Respond with ONLY the "
+            "requested JSON action object -- no prose, no code fences.",
+            prompt, json_mode=True, max_tokens=300, temperature=0.2)
+        if out and out.strip():
+            return out
+    except Exception:  # noqa: BLE001
+        pass
     if provider == "groq":
         return _groq_complete(prompt)
     if provider == "vercel":

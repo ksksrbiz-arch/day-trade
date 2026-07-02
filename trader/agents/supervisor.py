@@ -34,7 +34,7 @@ if not os.path.exists(_PY):
 SERVICES = {
     "dashboard":  ("dashboard.app:app",
                    ["-m", "uvicorn", "dashboard.app:app", "--host", "127.0.0.1", "--port", "8000"],
-                   "dash", "http://127.0.0.1:8000/api/health/full"),
+                   "dash", "http://127.0.0.1:" + os.environ.get("PORT", "8000") + "/api/health/full"),
     "exits":      ("trader.exits", ["-m", "trader.exits"], "exits", None),
     "optimizer":  ("dashboard.optimizer", ["-m", "dashboard.optimizer", "--daemon"], "opt", None),
     "autotuner":  ("dashboard.autotuner", ["-m", "dashboard.autotuner"], "at", None),
@@ -46,6 +46,18 @@ _DETACHED = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GRO
 
 
 def _running_cmdlines() -> str:
+    if os.name != "nt":                      # POSIX (Linux container / Render): read /proc
+        try:
+            import glob
+            parts = []
+            for cp in glob.glob("/proc/[0-9]*/cmdline"):
+                try:
+                    parts.append(open(cp, "rb").read().replace(b"\0", b" ").decode("utf-8", "replace"))
+                except Exception:  # noqa: BLE001
+                    continue
+            return "\n".join(parts)
+        except Exception:  # noqa: BLE001
+            return ""
     try:
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
@@ -61,8 +73,8 @@ def _launch(name: str, args: list[str], log: str):
     os.makedirs(os.path.join(_PROJ, "data"), exist_ok=True)
     out = open(os.path.join(_PROJ, "data", f"{log}.out.log"), "a")
     err = open(os.path.join(_PROJ, "data", f"{log}.err.log"), "a")
-    subprocess.Popen([_PY] + args, cwd=_PROJ, stdout=out, stderr=err,
-                     creationflags=_DETACHED, close_fds=True)
+    kw = {"creationflags": _DETACHED} if os.name == "nt" else {"start_new_session": True}
+    subprocess.Popen([_PY] + args, cwd=_PROJ, stdout=out, stderr=err, close_fds=True, **kw)
 
 
 def _http_ok(url: str, timeout: float = 4.0) -> bool:
@@ -88,6 +100,16 @@ def _port_open(port: int, timeout: float = 1.0) -> bool:
 def _kill(match: str):
     """Force-kill any python process whose command line matches (a hung service)."""
     try:
+        if os.name != "nt":
+            import glob, signal
+            for cp in glob.glob("/proc/[0-9]*/cmdline"):
+                try:
+                    cl = open(cp, "rb").read().replace(b"\0", b" ").decode("utf-8", "replace")
+                    if match in cl:
+                        os.kill(int(cp.split("/")[2]), signal.SIGTERM)
+                except Exception:  # noqa: BLE001
+                    continue
+            time.sleep(1.5); return
         subprocess.run(
             ["powershell", "-NoProfile", "-Command",
              "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
