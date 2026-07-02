@@ -3,3 +3,9 @@ anthropic>=0.40
 feedparser>=6.0
 python-dotenv>=1.0
 pytest>=8.0
+# web server (the backend API) — required at boot
+fastapi>=0.110
+uvicorn[standard]>=0.29
+# used directly across trader/ modules
+numpy>=1.26
+requests>=2.31
