@@ -23,7 +23,7 @@ import time
 
 import numpy as np
 
-METHODS = ["ta", "quant", "fundamental", "ml", "council", "prediction", "tnet"]
+METHODS = ["ta", "quant", "fundamental", "ml", "council", "prediction", "tnet", "alpha_engine"]
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _DATA = os.path.abspath(os.path.join(_HERE, "..", "data", "backprop"))
 DECISIONS = os.path.join(_DATA, "decisions.jsonl")
