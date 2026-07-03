@@ -44,13 +44,21 @@ export default function MeshNet() {
           if (col < 0) continue;
           counts[col] = (counts[col] || 0) + 1;
         }
-        const seen: Record<number, number> = {};
+        const CAP = 12;
+        const byCol: Record<number, any[]> = {};
         for (const n of d.nodes) {
           const col = groups.indexOf(n.group || "");
           if (col < 0) continue;
-          const idx = seen[col] = (seen[col] || 0);
-          seen[col] = idx + 1;
-          m.set(n.id, { id: n.id, label: n.label || n.id, col, idx, n: counts[col], act: 0.12 });
+          (byCol[col] = byCol[col] || []).push(n);
+        }
+        for (const col of Object.keys(byCol).map(Number)) {
+          let list = byCol[col];
+          if (list.length > CAP) {                       // sample evenly to balance columns
+            const step = list.length / CAP;
+            list = Array.from({ length: CAP }, (_, k) => list[Math.floor(k * step)]);
+          }
+          list.forEach((n, idx) =>
+            m.set(n.id, { id: n.id, label: n.label || n.id, col, idx, n: list.length, act: 0.16 }));
         }
         (m as any)._groups = groups;
         nodes.current = m;
@@ -103,10 +111,10 @@ export default function MeshNet() {
         const y = nd.n <= 1 ? (top + bot) / 2 : top + pad + (nd.idx * (bot - top - 2 * pad)) / (nd.n - 1);
         return [x, y];
       };
-      const rad = Math.max(4, Math.min(11, (bot - top) / (24 * 2.2)));
+      const rad = Math.max(7, Math.min(15, (bot - top) / (13 * 2.3)));
 
       // decay activity
-      m.forEach((nd) => { nd.act = Math.max(0.09, nd.act * 0.97); });
+      m.forEach((nd) => { nd.act = Math.max(0.16, nd.act * 0.965); });
 
       // static edges (faint)
       ctx.lineCap = "round";
@@ -114,7 +122,7 @@ export default function MeshNet() {
         const a = m.get(e.s)!, b = m.get(e.t)!;
         const [ax, ay] = nodeXY(a), [bx, by] = nodeXY(b);
         const cx = (ax + bx) / 2, cy = (ay + by) / 2 - (bx - ax) * 0.06;
-        ctx.strokeStyle = "rgba(120,160,190,0.09)"; ctx.lineWidth = 0.7;
+        ctx.strokeStyle = "rgba(120,170,200,0.14)"; ctx.lineWidth = 0.8;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cx, cy, bx, by); ctx.stroke();
       }
 
@@ -126,16 +134,18 @@ export default function MeshNet() {
         if (!a || !b) continue;
         const [ax, ay] = nodeXY(a), [bx, by] = nodeXY(b);
         const cx = (ax + bx) / 2, cy = (ay + by) / 2 - (bx - ax) * 0.06;
-        const speed = 0.045 + ((ei * 37) % 11) / 150;
-        const tt = ((ts / 1000) * speed + ei * 0.137) % 1;
-        const it = 1 - tt;
-        const x = it * it * ax + 2 * it * tt * cx + tt * tt * bx;
-        const y = it * it * ay + 2 * it * tt * cy + tt * tt * by;
-        const al = Math.sin(Math.PI * tt) * 0.3;
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, 4);
-        gr.addColorStop(0, `rgba(90,150,190,${al})`);
-        gr.addColorStop(1, "rgba(90,150,190,0)");
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+        const speed = 0.06 + ((ei * 37) % 11) / 120;
+        for (let q = 0; q < 2; q++) {
+          const tt = ((ts / 1000) * speed + ei * 0.137 + q * 0.5) % 1;
+          const it = 1 - tt;
+          const x = it * it * ax + 2 * it * tt * cx + tt * tt * bx;
+          const y = it * it * ay + 2 * it * tt * cy + tt * tt * by;
+          const al = Math.sin(Math.PI * tt) * 0.6;
+          const gr = ctx.createRadialGradient(x, y, 0, x, y, 6);
+          gr.addColorStop(0, `rgba(90,200,225,${al})`);
+          gr.addColorStop(1, "rgba(90,200,225,0)");
+          ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+        }
       }
 
       const now = ts;
@@ -162,7 +172,8 @@ export default function MeshNet() {
       // nodes
       m.forEach((nd) => {
         const [x, y] = nodeXY(nd);
-        const v = Math.max(0, Math.min(1, nd.act));
+        const tw = 0.06 * (0.5 + 0.5 * Math.sin(ts / 1000 * 1.6 + nd.idx * 0.7 + nd.col));
+        const v = Math.max(0, Math.min(1, nd.act + tw));
         if (v > 0.3) {
           const hg = ctx.createRadialGradient(x, y, rad * 0.4, x, y, rad * 3);
           hg.addColorStop(0, `rgba(120,200,255,${0.28 * v})`); hg.addColorStop(1, "rgba(0,0,0,0)");
