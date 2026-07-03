@@ -57,14 +57,27 @@ def weights(floor: float = 0.4, cap: float = 1.8, min_n: int = 5) -> dict:
     return out
 
 
+def _series(sym):
+    """(date, close) history -- CRSP if populated, else Alpaca IEX daily bars."""
+    try:
+        from ..crsp import query as crsp
+        bars = crsp.get_prices(sym, "2023-01-01", None)
+        cl = [(b["date"], b["close"]) for b in bars if b.get("close")]
+        if len(cl) >= 30:
+            return cl
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from .dataset import _alpaca_series
+        return _alpaca_series(sym)
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def reconcile(horizon: int = 5, decay: float = 0.0) -> dict:
     """Score logged votes vs realized forward return; update accuracy. Returns summary."""
     if not os.path.exists(LOG):
         return {"reconciled": 0, "note": "no council log yet"}
-    try:
-        from ..crsp import query as crsp
-    except Exception:  # noqa: BLE001
-        return {"reconciled": 0, "note": "crsp unavailable"}
     rel = load_reliability()
     done = 0
     processed = set()
@@ -88,12 +101,11 @@ def reconcile(horizon: int = 5, decay: float = 0.0) -> dict:
         sym, day = rec.get("symbol"), rec.get("day")
         if not sym or "/" in sym or not day:
             processed.add(h); continue
-        try:
-            bars = crsp.get_prices(sym, "2023-01-01", None)
-        except Exception:  # noqa: BLE001
+        pairs = _series(sym)
+        if not pairs:
             continue
-        closes = [b["close"] for b in bars if b.get("close")]
-        ds = [b["date"] for b in bars if b.get("close")]
+        closes = [c for _, c in pairs]
+        ds = [d for d, _ in pairs]
         idx = next((i for i, dd in enumerate(ds) if dd >= day), None)
         if idx is None or idx + horizon >= len(closes):
             continue                      # not matured yet -> leave for later

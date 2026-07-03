@@ -24,11 +24,13 @@ const KIND_COLOR: Record<string, number[]> = {
 type N = { id: string; label: string; col: number; idx: number; n: number; act: number };
 type P = { s: string; t: string; born: number; life: number; col: number[] };
 
-export default function MeshNet() {
+export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
   const cvs = useRef<HTMLCanvasElement>(null);
   const nodes = useRef<Map<string, N>>(new Map());
   const edges = useRef<{ s: string; t: string }[]>([]);
   const parts = useRef<P[]>([]);
+  const kindsRef = useRef<Set<string> | undefined>(kinds);
+  kindsRef.current = kinds;
 
   useEffect(() => {
     let alive = true;
@@ -76,6 +78,7 @@ export default function MeshNet() {
           const e = JSON.parse(msg.data);
           const m = nodes.current;
           if (!e || !m.has(e.source) || !m.has(e.target)) return;
+          if (kindsRef.current && !kindsRef.current.has(e.kind)) return;
           m.get(e.source)!.act = 1; m.get(e.target)!.act = Math.max(m.get(e.target)!.act, 0.85);
           const col = KIND_COLOR[e.kind] || [150, 200, 255];
           if (parts.current.length < 600)

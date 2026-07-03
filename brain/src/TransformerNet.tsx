@@ -74,12 +74,23 @@ function buildSnap(t: Trace): Snap {
   };
 }
 
-export default function TransformerNet() {
+export default function TransformerNet({ symbol = "AUTO" }: { symbol?: string }) {
   const cvs = useRef<HTMLCanvasElement>(null);
   const target = useRef<Snap | null>(null);   // latest data
   const shown = useRef<number[][]>([]);         // smoothed activations
 
   useEffect(() => {
+    if (symbol && symbol !== "AUTO") {
+      let stop = false;
+      const pull = async () => {
+        try {
+          const r = await fetch(`${BASE}/api/transformer/trace?symbol=${encodeURIComponent(symbol)}`, { cache: "no-store" });
+          if (r.ok) { const t = (await r.json()) as Trace; if (!stop && t && !t.error && t.layers?.length) target.current = buildSnap(t); }
+        } catch { /* transient */ }
+      };
+      pull(); const iv = setInterval(pull, 4000);
+      return () => { stop = true; clearInterval(iv); };
+    }
     let es: EventSource | null = null;
     try {
       es = new EventSource(`${BASE}/api/transformer/stream`);
@@ -93,7 +104,7 @@ export default function TransformerNet() {
       es.onerror = () => {};
     } catch { /* no EventSource */ }
     return () => es?.close();
-  }, []);
+  }, [symbol]);
 
   useEffect(() => {
     const c = cvs.current; if (!c) return;
