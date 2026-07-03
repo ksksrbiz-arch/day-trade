@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 // Beautiful, ANIMATED full-screen transformer dashboard. Continuous 60fps:
 // glowing particles travel along the synapses (speed + density = real attention
@@ -74,8 +74,7 @@ function buildSnap(t: Trace): Snap {
   };
 }
 
-export default function TransformerNet({ onClose }: { onClose: () => void }) {
-  const [live, setLive] = useState(false);
+export default function TransformerNet() {
   const cvs = useRef<HTMLCanvasElement>(null);
   const target = useRef<Snap | null>(null);   // latest data
   const shown = useRef<number[][]>([]);         // smoothed activations
@@ -84,7 +83,6 @@ export default function TransformerNet({ onClose }: { onClose: () => void }) {
     let es: EventSource | null = null;
     try {
       es = new EventSource(`${BASE}/api/transformer/stream`);
-      es.onopen = () => setLive(true);
       es.onmessage = (m) => {
         if (!m.data || m.data.startsWith(":")) return;
         try {
@@ -92,7 +90,7 @@ export default function TransformerNet({ onClose }: { onClose: () => void }) {
           if (t && !t.error && t.layers?.length) target.current = buildSnap(t);
         } catch { /* ignore */ }
       };
-      es.onerror = () => setLive(false);
+      es.onerror = () => {};
     } catch { /* no EventSource */ }
     return () => es?.close();
   }, []);
@@ -251,24 +249,5 @@ export default function TransformerNet({ onClose }: { onClose: () => void }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "#04070a" }}>
-      <canvas ref={cvs} style={{ display: "block" }} />
-      <div style={{ position: "fixed", top: 16, left: 26, right: 26, display: "flex", justifyContent: "space-between",
-                    alignItems: "center", fontFamily: "ui-monospace,monospace", pointerEvents: "none" }}>
-        <div style={{ fontWeight: 700, letterSpacing: 2, color: "#35e0d8", fontSize: 14,
-                      textShadow: "0 0 18px rgba(53,224,216,0.5)" }}>
-          ◆ TRANSFORMER NETWORK · LIVE
-          <span style={{ color: live ? "#35e0d8" : "#667", fontSize: 11, marginLeft: 12 }}>{live ? "● streaming" : "○ linking"}</span>
-        </div>
-      </div>
-      <button onClick={onClose} style={{ position: "fixed", top: 14, right: 16, zIndex: 101, cursor: "pointer",
-              background: "rgba(6,12,16,0.85)", color: "#cfe", border: "1px solid rgba(53,224,216,0.3)",
-              borderRadius: 8, padding: "6px 12px", fontFamily: "ui-monospace,monospace", fontSize: 12 }}>✕ close</button>
-      <div style={{ position: "fixed", bottom: 16, left: 26, fontFamily: "ui-monospace,monospace", fontSize: 11,
-                    color: "#5a7", pointerEvents: "none" }}>
-        neurons = live latent activation · particles = real attention flow (cyan amplify · red attenuate) · animates every forward pass
-      </div>
-    </div>
-  );
+  return <canvas ref={cvs} style={{ position: "fixed", inset: 0, zIndex: 100, display: "block", background: "#04070a" }} />;
 }
