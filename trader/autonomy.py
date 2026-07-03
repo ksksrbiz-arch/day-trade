@@ -385,6 +385,31 @@ def _ap_train_cortex(p):
     return cortex.train()
 
 
+def _ev_run_backtest():
+    """Time-gated (every ~4h): run a walk-forward backtest vs SPY on Alpaca data,
+    so the /api/backtest surface + the Quant Researcher agent have real data."""
+    try:
+        from .agents import state
+        import time as _t
+        last = float(state.kv_get("wf_last", 0) or 0)
+        if _t.time() - last < 4 * 3600:
+            return {"eligible": False, "reason": "cooldown (<4h since last walk-forward)"}
+        return {"eligible": True, "reason": "due for a walk-forward backtest", "proposal": {}}
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"eval error: {str(e)[:60]}"}
+
+
+def _ap_run_backtest(p):
+    from . import walkforward as wf
+    from .agents import state
+    import time as _t
+    r = wf.run(days=400, source="alpaca", out="latest.json")
+    state.kv_set("wf_last", _t.time())
+    m = r.get("meta", {})
+    return {"symbols": m.get("symbols"), "edge_vs_spy_pct": r.get("edge_vs_spy_pct"),
+            "error": m.get("error")}
+
+
 def _ev_discover_strategy():
     """Time-gated (every ~2h): run the hypothesis lab (generate -> backtest ->
     promote). Cheap here -- the heavy backtest sweep runs in apply()."""
@@ -413,6 +438,8 @@ def _ap_discover_strategy(p):
 ACTIONS = {
     "discover_strategy":    {"evaluate": _ev_discover_strategy, "apply": _ap_discover_strategy,
                              "auto_safe": True, "desc": "run hypothesis->backtest->promote sweep (self-teaching)"},
+    "run_backtest":         {"evaluate": _ev_run_backtest, "apply": _ap_run_backtest,
+                             "auto_safe": True, "desc": "run a walk-forward backtest vs SPY (Alpaca data)"},
     "prune_voice":          {"evaluate": _ev_prune_voice, "apply": _ap_prune_voice,
                              "auto_safe": False, "desc": "mute a proven-unprofitable voice"},
     "promote_voice":        {"evaluate": _ev_promote_voice, "apply": _ap_promote_voice,
@@ -470,6 +497,11 @@ def sweep() -> dict:
             try:
                 res = a["apply"](ev["proposal"])
                 entry = {"action": name, "status": "applied", "reason": ev["reason"], "detail": res}
+                try:
+                    from . import mesh
+                    mesh.publish("autonomy", "action", f"applied {name}: {ev['reason']}", salience=0.6)
+                except Exception:  # noqa: BLE001
+                    pass
             except Exception as e:  # noqa: BLE001
                 entry = {"action": name, "status": "error", "reason": str(e)[:100]}
         else:
