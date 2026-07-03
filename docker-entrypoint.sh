@@ -21,7 +21,7 @@ done
 
 if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   echo "[entrypoint] starting background daemons (RUN_DAEMONS=1)"
-  python -m trader.agents.runtime --loop --every 900 >> data/agents.log 2>&1 &
+  python -m trader.agents.runtime --loop --every 300 >> data/agents.log 2>&1 &
   python -m trader.agents.supervisor --loop --every 120 >> data/sup.log 2>&1 &
   python -m trader.exits >> data/exits.log 2>&1 &
   # ML: train an initial model now (fast, Alpaca-backed) + keep it improving

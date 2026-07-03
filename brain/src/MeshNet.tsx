@@ -106,7 +106,7 @@ export default function MeshNet() {
       const rad = Math.max(4, Math.min(11, (bot - top) / (24 * 2.2)));
 
       // decay activity
-      m.forEach((nd) => { nd.act *= 0.97; });
+      m.forEach((nd) => { nd.act = Math.max(0.09, nd.act * 0.97); });
 
       // static edges (faint)
       ctx.lineCap = "round";
@@ -114,12 +114,30 @@ export default function MeshNet() {
         const a = m.get(e.s)!, b = m.get(e.t)!;
         const [ax, ay] = nodeXY(a), [bx, by] = nodeXY(b);
         const cx = (ax + bx) / 2, cy = (ay + by) / 2 - (bx - ax) * 0.06;
-        ctx.strokeStyle = "rgba(120,150,180,0.05)"; ctx.lineWidth = 0.6;
+        ctx.strokeStyle = "rgba(120,160,190,0.09)"; ctx.lineWidth = 0.7;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(cx, cy, bx, by); ctx.stroke();
       }
 
-      // particles from fire events
+      // ambient baseline flow (always-on) + fire-event bursts (real activity)
       ctx.globalCompositeOperation = "lighter";
+      const eg = edges.current;
+      for (let ei = 0; ei < eg.length; ei++) {
+        const a = m.get(eg[ei].s), b = m.get(eg[ei].t);
+        if (!a || !b) continue;
+        const [ax, ay] = nodeXY(a), [bx, by] = nodeXY(b);
+        const cx = (ax + bx) / 2, cy = (ay + by) / 2 - (bx - ax) * 0.06;
+        const speed = 0.045 + ((ei * 37) % 11) / 150;
+        const tt = ((ts / 1000) * speed + ei * 0.137) % 1;
+        const it = 1 - tt;
+        const x = it * it * ax + 2 * it * tt * cx + tt * tt * bx;
+        const y = it * it * ay + 2 * it * tt * cy + tt * tt * by;
+        const al = Math.sin(Math.PI * tt) * 0.3;
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, 4);
+        gr.addColorStop(0, `rgba(90,150,190,${al})`);
+        gr.addColorStop(1, "rgba(90,150,190,0)");
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      }
+
       const now = ts;
       parts.current = parts.current.filter((p) => {
         const a = m.get(p.s), b = m.get(p.t);
