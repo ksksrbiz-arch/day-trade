@@ -385,7 +385,34 @@ def _ap_train_cortex(p):
     return cortex.train()
 
 
+def _ev_discover_strategy():
+    """Time-gated (every ~2h): run the hypothesis lab (generate -> backtest ->
+    promote). Cheap here -- the heavy backtest sweep runs in apply()."""
+    try:
+        from .agents import state
+        import time as _t
+        last = float(state.kv_get("hypolab_last", 0) or 0)
+        if _t.time() - last < 2 * 3600:
+            return {"eligible": False, "reason": "cooldown (<2h since last sweep)"}
+        return {"eligible": True, "reason": "due for a hypothesis/backtest sweep",
+                "proposal": {"n": 6}}
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"eval error: {str(e)[:60]}"}
+
+
+def _ap_discover_strategy(p):
+    from . import hypolab
+    from .agents import state
+    import time as _t
+    r = hypolab.run(int((p or {}).get("n", 6)))
+    state.kv_set("hypolab_last", _t.time())
+    return {"winner": r.get("winner"), "promoted": r.get("promoted"),
+            "baseline_vs": r.get("baseline_vs_benchmark")}
+
+
 ACTIONS = {
+    "discover_strategy":    {"evaluate": _ev_discover_strategy, "apply": _ap_discover_strategy,
+                             "auto_safe": True, "desc": "run hypothesis->backtest->promote sweep (self-teaching)"},
     "prune_voice":          {"evaluate": _ev_prune_voice, "apply": _ap_prune_voice,
                              "auto_safe": False, "desc": "mute a proven-unprofitable voice"},
     "promote_voice":        {"evaluate": _ev_promote_voice, "apply": _ap_promote_voice,
