@@ -30,6 +30,7 @@ from .labels import Label
 _DATA = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
 LEDGER = os.path.join(_DATA, "hypotheses.json")
 SAMPLE = os.path.join(_DATA, "sample_labels.jsonl")
+_SEED = os.path.join(os.path.dirname(__file__), "seed_labels.jsonl")
 
 # bounded search space -- (min, max, kind). Only governor-applied knobs.
 SPACE = {
@@ -127,7 +128,7 @@ def generate(n, ctx: str = "") -> list:
 def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     """Generate -> backtest -> rank -> (auto) promote the best if it beats
     baseline AND the benchmark. Returns the leaderboard; persists + publishes."""
-    path = path or SAMPLE
+    path = path or (SAMPLE if os.path.exists(SAMPLE) else _SEED)
     if not os.path.exists(path):
         return {"ok": False, "reason": "no label archive to backtest against"}
     cfg = config.load()
