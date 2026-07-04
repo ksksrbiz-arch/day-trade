@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Beautiful, ANIMATED full-screen transformer dashboard. Continuous 60fps:
 // glowing particles travel along the synapses (speed + density = real attention
@@ -78,6 +78,8 @@ export default function TransformerNet({ symbol = "AUTO" }: { symbol?: string })
   const cvs = useRef<HTMLCanvasElement>(null);
   const target = useRef<Snap | null>(null);   // latest data
   const shown = useRef<number[][]>([]);         // smoothed activations
+  const nodesRef = useRef<{ x: number; y: number; r: number; label: string; sub: string }[]>([]);
+  const [sel, setSel] = useState<{ x: number; y: number; label: string; sub: string } | null>(null);
 
   useEffect(() => {
     if (symbol && symbol !== "AUTO") {
@@ -195,6 +197,7 @@ export default function TransformerNet({ symbol = "AUTO" }: { symbol?: string })
       ctx.globalCompositeOperation = "source-over";
 
       // ---------- neurons ----------
+      nodesRef.current = [];
       snap.cols.forEach((_, ci) => {
         const vals = A[ci], r = rad(vals);
         vals.forEach((v, i) => {
@@ -214,6 +217,9 @@ export default function TransformerNet({ symbol = "AUTO" }: { symbol?: string })
           g.addColorStop(1, `rgb(${Math.round(lum * 0.5)},${Math.round(lum * 0.5)},${Math.round(lum * 0.6)})`);
           ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
           ctx.lineWidth = 1.1; ctx.strokeStyle = rgba(ci === 3 ? CY : [220, 235, 255], 0.5); ctx.stroke();
+          const _nm = ["Patches", "Encoder L1", "Encoder L2", "Macro Drivers"][ci];
+          nodesRef.current.push({ x, y, r, label: snap.labels[ci] ? String(snap.labels[ci]![i]) : `${_nm} #${i + 1}`,
+            sub: snap.labels[ci] ? `driver weight ${(vv * 100).toFixed(0)}%` : `${_nm} · activation ${(vv * 100).toFixed(0)}%` });
           const labels = snap.labels[ci];
           if (labels) {
             ctx.fillStyle = "#dff"; ctx.font = "600 12px ui-monospace,monospace"; ctx.textBaseline = "middle";
@@ -260,5 +266,29 @@ export default function TransformerNet({ symbol = "AUTO" }: { symbol?: string })
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return <canvas ref={cvs} style={{ position: "fixed", inset: 0, zIndex: 100, display: "block", background: "#04070a" }} />;
+  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const c = cvs.current; if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let best: any = null, bd = 1e9;
+    for (const n of nodesRef.current) { const d = Math.hypot(n.x - mx, n.y - my); if (d < n.r + 5 && d < bd) { bd = d; best = n; } }
+    setSel(best ? { x: e.clientX, y: e.clientY, label: best.label, sub: best.sub } : null);
+  };
+  return (
+    <>
+      <canvas ref={cvs} onClick={onClick}
+              style={{ position: "fixed", inset: 0, zIndex: 100, display: "block", background: "#04070a", cursor: "crosshair" }} />
+      {sel && (
+        <div style={{ position: "fixed", left: sel.x + 14, top: sel.y + 14, zIndex: 105, maxWidth: 240,
+                      background: "rgba(6,14,18,0.94)", border: "1px solid rgba(53,224,216,0.4)", borderRadius: 8,
+                      padding: "8px 10px", fontFamily: "ui-monospace,monospace", boxShadow: "0 0 24px rgba(0,0,0,0.5)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <b style={{ color: "#35e0d8", fontSize: 12 }}>{sel.label}</b>
+            <span onClick={() => setSel(null)} style={{ cursor: "pointer", color: "#889" }}>✕</span>
+          </div>
+          <div style={{ color: "#9ab", fontSize: 11, marginTop: 4 }}>{sel.sub}</div>
+        </div>
+      )}
+    </>
+  );
 }

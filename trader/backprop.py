@@ -65,6 +65,9 @@ def _price_fn(sym, asset, day, horizon):
         else:
             from .crsp import query as crsp
             ser = [(b["date"], b["close"]) for b in crsp.get_prices(sym, "2024-01-01", None) if b.get("close")]
+            if len(ser) < 30:                    # empty CRSP (cloud) -> Alpaca IEX daily bars
+                from .ml.dataset import _alpaca_series
+                ser = _alpaca_series(sym)
     except Exception:  # noqa: BLE001
         return None
     if not ser:

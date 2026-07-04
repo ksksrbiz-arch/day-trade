@@ -33,6 +33,19 @@ MODES = ("off", "propose", "auto")
 
 
 # ============================ policy ====================================== #
+def _regime_now() -> str:
+    try:
+        from . import market_brain
+        return market_brain.cached_regime("neutral")
+    except Exception:  # noqa: BLE001
+        return "neutral"
+
+
+def _gate_hours(calm: float, stressed: float) -> float:
+    """Adaptive cadence: explore faster when calm, slow down under stress."""
+    return stressed if _regime_now() in ("high_vol", "risk_off") else calm
+
+
 def _default_mode() -> str:
     m = os.getenv("AUTONOMY", "auto").strip().lower()
     return m if m in MODES else "auto"
@@ -392,8 +405,8 @@ def _ev_run_backtest():
         from .agents import state
         import time as _t
         last = float(state.kv_get("wf_last", 0) or 0)
-        if _t.time() - last < 4 * 3600:
-            return {"eligible": False, "reason": "cooldown (<4h since last walk-forward)"}
+        if _t.time() - last < _gate_hours(3, 6) * 3600:
+            return {"eligible": False, "reason": f"cooldown (regime-adaptive gate, {_regime_now()})"}
         return {"eligible": True, "reason": "due for a walk-forward backtest", "proposal": {}}
     except Exception as e:  # noqa: BLE001
         return {"eligible": False, "reason": f"eval error: {str(e)[:60]}"}
@@ -417,8 +430,8 @@ def _ev_discover_strategy():
         from .agents import state
         import time as _t
         last = float(state.kv_get("hypolab_last", 0) or 0)
-        if _t.time() - last < 2 * 3600:
-            return {"eligible": False, "reason": "cooldown (<2h since last sweep)"}
+        if _t.time() - last < _gate_hours(1, 3) * 3600:
+            return {"eligible": False, "reason": f"cooldown (regime-adaptive gate, {_regime_now()})"}
         return {"eligible": True, "reason": "due for a hypothesis/backtest sweep",
                 "proposal": {"n": 6}}
     except Exception as e:  # noqa: BLE001

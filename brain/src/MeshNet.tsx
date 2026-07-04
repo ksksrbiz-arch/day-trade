@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Live AGENT-MESH network. Columns = node groups (Connectors -> Council -> Cognition
 // -> Memory -> Runtime -> Tools -> Desk). Neuron brightness = decaying recent
@@ -31,6 +31,8 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
   const parts = useRef<P[]>([]);
   const kindsRef = useRef<Set<string> | undefined>(kinds);
   kindsRef.current = kinds;
+  const nodesRef = useRef<{ x: number; y: number; r: number; label: string; sub: string }[]>([]);
+  const [sel, setSel] = useState<{ x: number; y: number; label: string; sub: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -173,10 +175,13 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
       ctx.globalCompositeOperation = "source-over";
 
       // nodes
+      nodesRef.current = [];
       m.forEach((nd) => {
         const [x, y] = nodeXY(nd);
         const tw = 0.06 * (0.5 + 0.5 * Math.sin(ts / 1000 * 1.6 + nd.idx * 0.7 + nd.col));
         const v = Math.max(0, Math.min(1, nd.act + tw));
+        nodesRef.current.push({ x, y, r: rad, label: nd.label,
+          sub: `${SHORT[groups[nd.col]] || groups[nd.col]} · activity ${(v * 100).toFixed(0)}%` });
         if (v > 0.3) {
           const hg = ctx.createRadialGradient(x, y, rad * 0.4, x, y, rad * 3);
           hg.addColorStop(0, `rgba(120,200,255,${0.28 * v})`); hg.addColorStop(1, "rgba(0,0,0,0)");
@@ -203,5 +208,29 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return <canvas ref={cvs} style={{ position: "fixed", inset: 0, zIndex: 100, display: "block", background: "#04070a" }} />;
+  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const c = cvs.current; if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    let best: any = null, bd = 1e9;
+    for (const n of nodesRef.current) { const d = Math.hypot(n.x - mx, n.y - my); if (d < n.r + 6 && d < bd) { bd = d; best = n; } }
+    setSel(best ? { x: e.clientX, y: e.clientY, label: best.label, sub: best.sub } : null);
+  };
+  return (
+    <>
+      <canvas ref={cvs} onClick={onClick}
+              style={{ position: "fixed", inset: 0, zIndex: 100, display: "block", background: "#04070a", cursor: "crosshair" }} />
+      {sel && (
+        <div style={{ position: "fixed", left: sel.x + 14, top: sel.y + 14, zIndex: 105, maxWidth: 240,
+                      background: "rgba(6,14,18,0.94)", border: "1px solid rgba(53,224,216,0.4)", borderRadius: 8,
+                      padding: "8px 10px", fontFamily: "ui-monospace,monospace", boxShadow: "0 0 24px rgba(0,0,0,0.5)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <b style={{ color: "#35e0d8", fontSize: 12 }}>{sel.label}</b>
+            <span onClick={() => setSel(null)} style={{ cursor: "pointer", color: "#889" }}>✕</span>
+          </div>
+          <div style={{ color: "#9ab", fontSize: 11, marginTop: 4 }}>{sel.sub}</div>
+        </div>
+      )}
+    </>
+  );
 }
