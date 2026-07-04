@@ -423,6 +423,49 @@ def _ap_run_backtest(p):
             "error": m.get("error")}
 
 
+def _ev_tune_aggression():
+    """Time-gated (~1h): teach the desk its own risk appetite -- raise aggression
+    when it's demonstrably working (positive edge, low drawdown), cut it when
+    losing. Bounded [0.2, 1.2]. This is 'aggressive for profit, but self-correcting'."""
+    try:
+        from .agents import state
+        import time as _t
+        last = float(state.kv_get("aggr_last", 0) or 0)
+        if _t.time() - last < 3600:
+            return {"eligible": False, "reason": "cooldown (<1h)"}
+        return {"eligible": True, "reason": "tune aggression from realized edge/drawdown", "proposal": {}}
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"eval error: {str(e)[:60]}"}
+
+
+def _ap_tune_aggression(p):
+    from .agents import state
+    import time as _t
+    cur = float(state.kv_get("aggression", os.getenv("AGGRESSION", "0.6")) or 0.6)
+    edge, dd = 0.0, 0.0
+    try:
+        from .ml import infer
+        edge = float(infer.model_card().get("edge", 0.0) or 0.0)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        b = circuit_breaker_check()
+        dd = float(b.get("dd") or 0.0)
+    except Exception:  # noqa: BLE001
+        pass
+    if dd >= 8:
+        nxt = cur - 0.15                    # drawing down -> pull risk in
+    elif edge > 0.03:
+        nxt = cur + 0.10                    # real edge + safe -> lean in more
+    elif edge <= 0.0:
+        nxt = cur - 0.10                    # no edge -> back off
+    else:
+        nxt = cur
+    nxt = max(0.2, min(1.2, round(nxt, 2)))
+    state.kv_set("aggression", nxt); state.kv_set("aggr_last", _t.time())
+    return {"aggression": nxt, "from": round(cur, 2), "edge": round(edge, 4), "dd": round(dd, 2)}
+
+
 def _ev_discover_strategy():
     """Time-gated (every ~2h): run the hypothesis lab (generate -> backtest ->
     promote). Cheap here -- the heavy backtest sweep runs in apply()."""
@@ -449,6 +492,8 @@ def _ap_discover_strategy(p):
 
 
 ACTIONS = {
+    "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
+                             "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
     "discover_strategy":    {"evaluate": _ev_discover_strategy, "apply": _ap_discover_strategy,
                              "auto_safe": True, "desc": "run hypothesis->backtest->promote sweep (self-teaching)"},
     "run_backtest":         {"evaluate": _ev_run_backtest, "apply": _ap_run_backtest,

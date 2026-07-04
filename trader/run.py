@@ -154,7 +154,12 @@ def _risk_scale(cfg, conf: float = 0.6):
     favorable tape, dialed by AGGRESSION (0..1.5). The drawdown breaker sits below
     this, so aggression can't blow up the account."""
     scale, why, rg, edge = 1.0, [], "neutral", 0.0
-    aggression = max(0.0, min(1.5, float(os.getenv("AGGRESSION", "0.6"))))
+    try:
+        from .agents import state as _st
+        aggression = float(_st.kv_get("aggression", os.getenv("AGGRESSION", "0.6")))
+    except Exception:  # noqa: BLE001
+        aggression = float(os.getenv("AGGRESSION", "0.6"))
+    aggression = max(0.0, min(1.5, aggression))
     try:
         from .market_brain import cached_regime
         rg = cached_regime("neutral")
