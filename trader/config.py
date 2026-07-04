@@ -106,7 +106,7 @@ def load() -> AppConfig:
         regime_filter=_env_bool("REGIME_FILTER", True),
         dynamic_sizing=_env_bool("DYNAMIC_SIZING", True),
         size_min_mult=float(os.getenv("SIZE_MIN_MULT", "0.5")),
-        size_max_mult=float(os.getenv("SIZE_MAX_MULT", "1.0")),
+        size_max_mult=float(os.getenv("SIZE_MAX_MULT", "2.2")),
         vol_target=float(os.getenv("VOL_TARGET", "0.02")),
         adaptive_exits=_env_bool("ADAPTIVE_EXITS", False),
         tp_vol_mult=float(os.getenv("TP_VOL_MULT", "2.5")),

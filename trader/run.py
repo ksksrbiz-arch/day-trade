@@ -148,15 +148,18 @@ def _day_inc():
     _day_state["n"] += 1
 
 
-def _risk_scale(cfg):
-    """Bet in proportion to MEASURED edge + regime -- the honest anti-bleed rule.
-    Near-zero measured edge => near-minimum size; stressed tape => cut further."""
-    scale, why = 1.0, []
+def _risk_scale(cfg, conf: float = 0.6):
+    """Conviction-scaled risk. DOWN-size on no-edge / stress (capital preservation);
+    LEAN IN (up-size) only where there's real measured edge + high conviction + a
+    favorable tape, dialed by AGGRESSION (0..1.5). The drawdown breaker sits below
+    this, so aggression can't blow up the account."""
+    scale, why, rg, edge = 1.0, [], "neutral", 0.0
+    aggression = max(0.0, min(1.5, float(os.getenv("AGGRESSION", "0.6"))))
     try:
         from .market_brain import cached_regime
         rg = cached_regime("neutral")
         if rg == "high_vol":
-            scale *= 0.5; why.append("high_vol x0.5")
+            scale *= 0.55; why.append("high_vol x0.55")
         elif rg == "risk_off":
             scale *= 0.7; why.append("risk_off x0.7")
     except Exception:  # noqa: BLE001
@@ -164,13 +167,18 @@ def _risk_scale(cfg):
     try:
         from .ml import infer
         edge = float(infer.model_card().get("edge", 0.0) or 0.0)
-        if edge <= 0.0:
-            scale *= 0.3; why.append("no-edge x0.3")
-        elif edge < 0.03:
-            scale *= 0.6; why.append("thin-edge x0.6")
     except Exception:  # noqa: BLE001
         pass
-    return max(0.1, round(scale, 3)), ", ".join(why) or "full size"
+    if edge <= 0.0:
+        scale *= 0.3; why.append("no-edge x0.3")
+    elif edge < 0.03:
+        scale *= 0.6; why.append("thin-edge x0.6")
+    # AGGRESSION lean-in: bet bigger on genuine, high-conviction, trend-aligned edge
+    if edge > 0.02 and rg in ("risk_on", "neutral") and conf >= 0.65:
+        lean = 1.0 + aggression * min(1.0, edge / 0.05) * min(1.0, (conf - 0.6) / 0.3)
+        scale *= lean; why.append(f"lean-in x{lean:.2f}")
+    cap = 1.0 + aggression * 1.6
+    return max(0.1, min(cap, round(scale, 3))), ", ".join(why) or "full size"
 
 
 def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
@@ -188,7 +196,7 @@ def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
     if _v["decision"] != "approve":
         return None, _instr, intent.symbol, "POLICY-" + _v["decision"] + ": " + "; ".join(_v["reasons"])[:110]
     _day_inc()
-    _sc, _why = _risk_scale(cfg)
+    _sc, _why = _risk_scale(cfg, conf)
     if _sc < 1.0:
         try:
             intent.notional = round(float(intent.notional) * _sc, 2)
