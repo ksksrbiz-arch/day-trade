@@ -82,8 +82,14 @@ _ALP_UNIVERSE = ["SPY", "QQQ", "IWM", "DIA", "AAPL", "MSFT", "NVDA", "AMZN", "GO
 _ALP_SERIES_CACHE = {"ts": 0.0, "val": None}
 
 
-def _alpaca_series(sym, limit=400):
-    import os, json, datetime, urllib.request, urllib.parse
+_SYM_SERIES_CACHE: dict = {}          # sym -> (ts, series) ; memoize so a backfill
+                                      # resolving thousands of rows only fetches once.
+
+def _alpaca_series(sym, limit=400, ttl=3600):
+    import os, json, datetime, urllib.request, urllib.parse, time as _t
+    hit = _SYM_SERIES_CACHE.get(sym)
+    if hit and (_t.time() - hit[0]) < ttl:
+        return hit[1]
     k = os.environ.get("ALPACA_API_KEY", ""); sec = os.environ.get("ALPACA_SECRET_KEY", "")
     if not k or not sec:
         return []
@@ -95,7 +101,10 @@ def _alpaca_series(sym, limit=400):
                                      headers={"APCA-API-KEY-ID": k, "APCA-API-SECRET-KEY": sec,
                                               "User-Agent": "Mozilla/5.0"})
         d = json.loads(urllib.request.urlopen(req, timeout=20).read())
-        return [(b["t"][:10], b["c"]) for b in (d.get("bars") or []) if "c" in b and "t" in b]
+        out = [(b["t"][:10], b["c"]) for b in (d.get("bars") or []) if "c" in b and "t" in b]
+        if out:
+            _SYM_SERIES_CACHE[sym] = (_t.time(), out)
+        return out
     except Exception:  # noqa: BLE001
         return []
 

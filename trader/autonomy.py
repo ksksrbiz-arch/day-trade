@@ -511,6 +511,35 @@ def _ap_discover_strategy(p):
             "baseline_vs": r.get("baseline_vs_benchmark")}
 
 
+def _ev_bootstrap_brain():
+    """One-shot cold-start: when the fusion decision store is nearly empty the
+    cortex + confluence learners cannot train at all. This backfills thousands of
+    point-in-time historical decisions so they can train immediately, instead of
+    waiting weeks for live decisions to mature. Self-limiting: once the store has
+    >= 30 rows this is permanently ineligible."""
+    try:
+        from . import pretrain
+        # cheap short-circuit: don't re-run within a day of the last cold-start
+        age = _age_h(pretrain._STATE)
+        if age is not None and age < 24:
+            return {"eligible": False, "reason": f"cold-start attempted recently ({age}h)"}
+        # gate on RESOLVED training rows (what cortex/confluence actually consume),
+        # not merely logged rows -- recent live decisions log but do not resolve yet
+        n = _cortex_samples()
+        if n >= 30:
+            return {"eligible": False, "reason": f"fusion store warm ({n} resolved) -> no cold-start needed"}
+        return {"eligible": True,
+                "reason": f"fusion store cold ({n} resolved) -> backfill history to wake the brain",
+                "proposal": {"kind": "bootstrap_brain"}}
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"eval error: {str(e)[:80]}"}
+
+
+def _ap_bootstrap_brain(p):
+    from . import pretrain
+    return pretrain.run(max_symbols=24, step=5, horizon=10, warmup=70)
+
+
 ACTIONS = {
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
                              "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
@@ -532,6 +561,8 @@ ACTIONS = {
                              "auto_safe": True, "desc": "retrain the ML model when stale (champion-gated)"},
     "recalibrate_tnet":     {"evaluate": _ev_recalibrate_tnet, "apply": _ap_recalibrate,
                              "auto_safe": True, "desc": "recalibrate the transformer when stale"},
+    "bootstrap_brain":      {"evaluate": _ev_bootstrap_brain, "apply": _ap_bootstrap_brain,
+                             "auto_safe": True, "desc": "cold-start the fusion brain from historical decisions (one-shot)"},
     "train_cortex":         {"evaluate": _ev_train_cortex, "apply": _ap_train_cortex,
                              "auto_safe": True, "desc": "train the neural core when untrained/stale (champion-gated)"},
     "prune_data_logs":      {"evaluate": _ev_prune_data_logs, "apply": _ap_prune_logs,
