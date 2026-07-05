@@ -540,6 +540,38 @@ def _ap_bootstrap_brain(p):
     return pretrain.run(max_symbols=24, step=5, horizon=10, warmup=70)
 
 
+def _ev_scan_catalysts():
+    """Periodically scan the universe for momentum catalysts and arm the
+    watch->wait->strike list, so the desk always has fresh, price-confirmed
+    setups queued. Auto-safe: arming only queues a watch; the strike still
+    requires price confirmation + the confluence gate."""
+    try:
+        from . import scanner  # noqa: F401
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"scanner unavailable: {str(e)[:60]}"}
+    last = _age_h(os.path.join(_DATA, "scan_last"))
+    gate = _gate_hours(3, 6)
+    if last is not None and last < gate:
+        return {"eligible": False, "reason": f"cooldown ({last}h < {gate}h scan gate)"}
+    return {"eligible": True, "reason": "scan universe -> arm momentum catalysts",
+            "proposal": {"kind": "scan_catalysts"}}
+
+
+def _ap_scan_catalysts(p):
+    from . import scanner
+    from .agents import state
+    import time as _t
+    res = scanner.arm_top(n=6)
+    try:
+        state.kv_set("scan_last", _t.time())
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "scan_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
 ACTIONS = {
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
                              "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
@@ -565,6 +597,8 @@ ACTIONS = {
                              "auto_safe": True, "desc": "cold-start the fusion brain from historical decisions (one-shot)"},
     "train_cortex":         {"evaluate": _ev_train_cortex, "apply": _ap_train_cortex,
                              "auto_safe": True, "desc": "train the neural core when untrained/stale (champion-gated)"},
+    "scan_catalysts":       {"evaluate": _ev_scan_catalysts, "apply": _ap_scan_catalysts,
+                             "auto_safe": True, "desc": "scan momentum catalysts + arm the watch/strike list"},
     "prune_data_logs":      {"evaluate": _ev_prune_data_logs, "apply": _ap_prune_logs,
                              "auto_safe": True, "desc": "prune growth-prone logs to stay bounded"},
     "relax_selectivity":    {"evaluate": _ev_relax_selectivity, "apply": _ap_param,

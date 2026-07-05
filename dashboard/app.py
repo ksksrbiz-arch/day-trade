@@ -1115,4 +1115,31 @@ def pretrain_run(max_symbols: int = 24, step: int = 5, horizon: int = 10, warmup
         return {"ok": False, "error": str(e)[:300], "trace": traceback.format_exc()[-800:]}
 
 
+@app.get("/api/spot")
+def api_spot(symbols: str = "BTCUSD,ETHUSD,SOLUSD"):
+    """Resilient real-time crypto spot (CryptoCompare -> Coinbase -> CoinGecko)."""
+    try:
+        from trader import spot
+        syms = [x.strip() for x in symbols.split(",") if x.strip()]
+        got, src = spot.spots(syms)
+        return {"spots": got, "source": src, "status": spot.status()}
+    except Exception as e:  # noqa: BLE001
+        return {"spots": {}, "source": "error", "error": str(e)[:160]}
+
+
+@app.get("/api/scanner")
+def api_scanner(arm: bool = False, fade: bool = False, n: int = 8, min_conf: float = 0.62):
+    """Momentum/catalyst scanner over daily bars. arm=true also arms the strongest
+    into the watch->wait->strike list (fills WATCHLIST - ARMED)."""
+    try:
+        from trader import scanner
+        cats = scanner.scan(fade=fade, min_conf=min_conf)[:n]
+        out = {"catalysts": cats, "count": len(cats), "fade": fade}
+        if arm:
+            out["armed"] = scanner.arm_top(n=min(n, 6), fade=fade)
+        return out
+    except Exception as e:  # noqa: BLE001
+        return {"catalysts": [], "error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

@@ -48,6 +48,7 @@ _KNOB_TO_FIELD = {
 }
 PROMOTE_MARGIN = 0.005   # winner must beat baseline vs_benchmark by >= 0.5 pts
 MIN_TRADES = 8
+T_MIN = 1.5                    # min t-stat to promote -- edge must clear the noise floor
 
 
 def _clamp(name, v):
@@ -83,7 +84,19 @@ def _evaluate(strat, path, benchmark=0.0) -> dict:
         side = "long" if intent.side == "buy" else "short"
         broker.open(intent.symbol, intent.notional, rec["entry_price"], side)
         broker.close(intent.symbol, rec["exit_price"])
-    return metrics.summarize(broker.closed, broker.equity_curve, benchmark)
+    m = metrics.summarize(broker.closed, broker.equity_curve, benchmark)
+    # net-of-fee statistical significance of the per-trade edge (t = mean/SE);
+    # rigor adapted from Krypt Trader's fee-aware backtest (MIT).
+    try:
+        from . import stats
+        rets = [stats.net_return(t.entry_price, t.exit_price,
+                                 "buy" if t.side == "long" else "sell")
+                for t in broker.closed if getattr(t, "entry_price", None)]
+        sig = stats.summarize(rets)
+        m["t_stat"] = sig["t"]; m["net_ev"] = sig["net_ev"]; m["significant"] = sig["significant"]
+    except Exception:  # noqa: BLE001
+        m.setdefault("t_stat", 0.0); m.setdefault("significant", False)
+    return m
 
 
 def _random_hypotheses(n):
@@ -176,7 +189,8 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     board = [{"name": "baseline", "params": {}, "rationale": "current config",
               "vs_benchmark": round(base_vs, 4), "total_return": round(base.get("total_return", 0.0), 4),
               "win_rate": round(base.get("win_rate", 0.0), 3), "trades": base.get("trades", 0),
-              "max_drawdown": round(base.get("max_drawdown", 0.0), 4)}]
+              "max_drawdown": round(base.get("max_drawdown", 0.0), 4),
+              "t_stat": round(base.get("t_stat", 0.0), 2), "significant": base.get("significant", False)}]
     ctx = f"baseline vs_benchmark={base_vs:.3f} trades={base.get('trades')}"
     for h in generate(n, ctx):
         m = _evaluate(_apply(cfg.strategy, h["params"]), path, benchmark)
@@ -184,7 +198,8 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
                       "rationale": h["rationale"], "vs_benchmark": round(m.get("vs_benchmark", 0.0), 4),
                       "total_return": round(m.get("total_return", 0.0), 4),
                       "win_rate": round(m.get("win_rate", 0.0), 3), "trades": m.get("trades", 0),
-                      "max_drawdown": round(m.get("max_drawdown", 0.0), 4)})
+                      "max_drawdown": round(m.get("max_drawdown", 0.0), 4),
+                      "t_stat": round(m.get("t_stat", 0.0), 2), "significant": m.get("significant", False)})
 
     # PROFIT-SEEKING objective: reward risk-adjusted RETURN (not just beating SPY),
     # so the search explores higher-return regions -- while promotion still
@@ -200,7 +215,8 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     winner = (best["name"] != "baseline"
               and best["vs_benchmark"] > 0                      # must still beat SPY
               and best["profit_score"] >= base_ps + PROMOTE_MARGIN
-              and best["trades"] >= MIN_TRADES)
+              and best["trades"] >= MIN_TRADES
+              and best.get("t_stat", 0.0) >= T_MIN)             # edge must clear the noise floor
 
     if winner:
         try:
@@ -233,8 +249,14 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     except Exception:  # noqa: BLE001
         pass
 
+    try:
+        from . import stats as _stats
+        _verdict = _stats.verdict({"n": best.get("trades", 0), "net_ev": best.get("net_ev", 0.0),
+                                   "t": best.get("t_stat", 0.0)})
+    except Exception:  # noqa: BLE001
+        _verdict = ""
     result = {"ok": True, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-              "aggression_reco": agg_reco, "aggression_sweep": agg_rows,
+              "aggression_reco": agg_reco, "aggression_sweep": agg_rows, "verdict": _verdict,
               "baseline_vs_benchmark": round(base_vs, 4), "leaderboard": ranked[:n + 1],
               "promoted": promoted, "winner": winner}
     try:
