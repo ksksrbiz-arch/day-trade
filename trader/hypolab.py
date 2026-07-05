@@ -148,12 +148,20 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
                       "win_rate": round(m.get("win_rate", 0.0), 3), "trades": m.get("trades", 0),
                       "max_drawdown": round(m.get("max_drawdown", 0.0), 4)})
 
-    ranked = sorted(board, key=lambda r: r["vs_benchmark"], reverse=True)
+    # PROFIT-SEEKING objective: reward risk-adjusted RETURN (not just beating SPY),
+    # so the search explores higher-return regions -- while promotion still
+    # requires genuinely beating the benchmark (honest guard).
+    for _r in board:
+        _r["profit_score"] = round(_r.get("total_return", 0.0)
+                                   - 0.4 * abs(_r.get("max_drawdown", 0.0))
+                                   + 0.5 * _r.get("vs_benchmark", 0.0), 4)
+    base_ps = next((_r["profit_score"] for _r in board if _r["name"] == "baseline"), 0.0)
+    ranked = sorted(board, key=lambda r: r["profit_score"], reverse=True)
     best = ranked[0]
     promoted = None
     winner = (best["name"] != "baseline"
-              and best["vs_benchmark"] > 0
-              and best["vs_benchmark"] >= base_vs + PROMOTE_MARGIN
+              and best["vs_benchmark"] > 0                      # must still beat SPY
+              and best["profit_score"] >= base_ps + PROMOTE_MARGIN
               and best["trades"] >= MIN_TRADES)
 
     if winner:

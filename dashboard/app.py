@@ -1027,6 +1027,20 @@ def learning():
         out["hypotheses"] = hypolab.latest()
     except Exception:  # noqa: BLE001
         out["hypotheses"] = {}
+    try:
+        from trader.agents import state as _st
+        aggr = float(_st.kv_get("aggression", 0.6) or 0.6)
+        edge = 0.0
+        try:
+            from trader.ml import infer as _inf
+            edge = float(_inf.model_card().get("edge", 0.0) or 0.0)
+        except Exception:  # noqa: BLE001
+            pass
+        br = out.get("breaker", {}) or {}
+        out["risk"] = {"aggression": round(aggr, 2), "edge": round(edge, 4),
+                       "equity": br.get("eq"), "high_water": br.get("hw"), "drawdown": br.get("dd")}
+    except Exception:  # noqa: BLE001
+        out["risk"] = {}
     return out
 
 
