@@ -18,18 +18,24 @@ export default function NetworkView({ onClose }: { onClose: () => void }) {
   const [kinds, setKinds] = useState<Set<string>>(new Set(KINDS.map((k) => k[0])));
 
   const tab = (active: boolean): React.CSSProperties => ({
-    cursor: "pointer", padding: "6px 14px", borderRadius: 8, fontSize: 12, letterSpacing: 1,
-    fontFamily: "ui-monospace,monospace",
-    background: active ? "rgba(53,224,216,0.16)" : "rgba(6,12,16,0.6)",
-    color: active ? CY : "#8aa",
-    border: `1px solid ${active ? "rgba(53,224,216,0.5)" : "rgba(120,150,180,0.25)"}`,
+    cursor: "pointer", padding: "7px 16px", borderRadius: 10, fontSize: 12, letterSpacing: 1.2,
+    fontFamily: "ui-monospace,monospace", fontWeight: 600, textTransform: "uppercase",
+    background: active
+      ? "linear-gradient(180deg, rgba(60,240,228,0.22), rgba(60,240,228,0.06))"
+      : "rgba(10,18,30,0.55)",
+    color: active ? CY : "#8aa", backdropFilter: "blur(12px)",
+    border: `1px solid ${active ? "rgba(60,240,228,0.55)" : "rgba(120,150,180,0.22)"}`,
+    boxShadow: active ? "0 0 18px rgba(60,240,228,0.3)" : "none",
   });
   const toggleKind = (k: string) => setKinds((prev) => {
     const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n;
   });
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, background: "#04070a" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 100,
+                  background: "radial-gradient(120% 90% at 12% -10%, rgba(60,240,228,0.10), transparent 55%),"
+                    + " radial-gradient(110% 90% at 100% 8%, rgba(167,139,250,0.10), transparent 52%),"
+                    + " linear-gradient(180deg,#050a14 0%,#04070e 60%,#03050b 100%)" }}>
       {mode === "transformer" ? <TransformerNet symbol={sym} /> : <MeshNet kinds={kinds} />}
 
       <div style={{ position: "fixed", top: 16, left: 26, right: 26, zIndex: 102, display: "flex",
@@ -78,9 +84,11 @@ export default function NetworkView({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      <button onClick={onClose} style={{ position: "fixed", top: 14, right: 16, zIndex: 103, cursor: "pointer",
-              background: "rgba(6,12,16,0.85)", color: "#cfe", border: "1px solid rgba(53,224,216,0.3)",
-              borderRadius: 8, padding: "6px 12px", fontFamily: "ui-monospace,monospace", fontSize: 12 }}>✕ close</button>
+      <button onClick={onClose} style={{ position: "fixed", top: 16, right: 18, zIndex: 103, cursor: "pointer",
+              background: "linear-gradient(180deg, rgba(255,93,108,0.14), rgba(255,93,108,0.05))",
+              color: "#ffd7db", border: "1px solid rgba(255,93,108,0.35)", borderRadius: 9,
+              padding: "7px 13px", fontFamily: "ui-monospace,monospace", fontSize: 12, letterSpacing: 0.5,
+              backdropFilter: "blur(12px)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>✕ CLOSE</button>
 
       <div style={{ position: "fixed", bottom: 16, left: 26, right: 120, zIndex: 102,
                     fontFamily: "ui-monospace,monospace", fontSize: 11, color: "#5a7", pointerEvents: "none" }}>

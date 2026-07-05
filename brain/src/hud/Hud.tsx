@@ -71,8 +71,9 @@ export default function Hud() {
 
   return (
     <>
-      {/* Stark targeting frame */}
+      {/* Stark targeting frame + ambient scan sweep */}
       <div className="stark-frame"><i className="tl" /><i className="tr" /><i className="bl" /><i className="br" /></div>
+      <div className="stark-sweep" />
 
       {/* title bar */}
       <div className="hud panel tc">

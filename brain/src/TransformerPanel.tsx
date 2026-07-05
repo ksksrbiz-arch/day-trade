@@ -248,23 +248,26 @@ export default function TransformerPanel() {
 }
 
 const panelStyle: React.CSSProperties = {
-  position: "fixed", right: 16, top: 84, width: 300, padding: 14,
-  background: "rgba(6,12,16,0.82)", border: "1px solid rgba(53,224,216,0.25)",
-  borderRadius: 10, backdropFilter: "blur(8px)", color: "#cfe",
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", zIndex: 50,
-  boxShadow: "0 0 40px rgba(0,0,0,0.5)",
+  position: "fixed", right: 18, top: 92, width: 300, padding: 15,
+  background: "linear-gradient(158deg, rgba(10,18,30,0.66), rgba(8,14,24,0.46))",
+  border: "1px solid rgba(96,214,230,0.28)", borderRadius: 12,
+  backdropFilter: "blur(18px) saturate(1.2)", WebkitBackdropFilter: "blur(18px) saturate(1.2)",
+  color: "#e9f2f8", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", zIndex: 50,
+  boxShadow: "0 18px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)",
 };
 const btnStyle: React.CSSProperties = {
-  position: "fixed", right: 16, top: 84, zIndex: 50, cursor: "pointer",
-  background: "rgba(6,12,16,0.82)", color: CYAN, border: "1px solid rgba(53,224,216,0.25)",
-  borderRadius: 8, padding: "6px 10px", fontSize: 11, letterSpacing: 1,
+  position: "fixed", right: 18, top: 92, zIndex: 50, cursor: "pointer",
+  background: "linear-gradient(180deg, rgba(60,240,228,0.12), rgba(60,240,228,0.04))",
+  color: CYAN, border: "1px solid rgba(96,214,230,0.28)",
+  borderRadius: 9, padding: "7px 12px", fontSize: 11, letterSpacing: 1,
   fontFamily: "ui-monospace, monospace",
+  backdropFilter: "blur(12px)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
 };
 const xStyle: React.CSSProperties = {
   cursor: "pointer", background: "transparent", color: "#889", border: "none", fontSize: 16, lineHeight: 1,
 };
-const sectionLabel: React.CSSProperties = { fontSize: 9, letterSpacing: 1, color: "#6a8", marginBottom: 4 };
-const barTrack: React.CSSProperties = { height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" };
+const sectionLabel: React.CSSProperties = { fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: "#57cdc6", marginBottom: 5, marginTop: 2 };
+const barTrack: React.CSSProperties = { height: 6, background: "rgba(140,180,210,0.10)", borderRadius: 4, overflow: "hidden" };
 const barFill: React.CSSProperties = { height: "100%", borderRadius: 3 };
 const pill: React.CSSProperties = {
   cursor: "pointer", background: "transparent", border: "1px solid #334", borderRadius: 4,

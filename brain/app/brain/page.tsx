@@ -19,13 +19,19 @@ export default function BrainPage() {
       <Hud />
       <TransformerPanel />
       <LearningPanel />
-      <button onClick={() => setNetOpen(true)}
-              style={{ position: "fixed", bottom: 16, right: 16, zIndex: 60, cursor: "pointer",
-                       background: "rgba(6,12,16,0.85)", color: "#35e0d8",
-                       border: "1px solid rgba(53,224,216,0.3)", borderRadius: 8,
-                       padding: "8px 12px", fontFamily: "ui-monospace, monospace", fontSize: 12,
-                       letterSpacing: 1 }}>
-        ◆ NETWORK VIEW
+      <button
+        onClick={() => setNetOpen(true)}
+        style={{
+          position: "fixed", bottom: 18, right: 18, zIndex: 60, cursor: "pointer",
+          background: "linear-gradient(180deg, rgba(60,240,228,0.16), rgba(167,139,250,0.10))",
+          color: "#eafcff", border: "1px solid rgba(96,214,230,0.4)", borderRadius: 10,
+          padding: "10px 16px", fontFamily: "ui-monospace, monospace", fontSize: 12,
+          fontWeight: 600, letterSpacing: 1.5, textTransform: "uppercase",
+          backdropFilter: "blur(14px) saturate(1.2)",
+          boxShadow: "0 10px 34px rgba(0,0,0,0.5), 0 0 22px rgba(60,240,228,0.28), inset 0 1px 0 rgba(255,255,255,0.08)",
+        }}
+      >
+        ◆ Network View
       </button>
       {netOpen && <NetworkView onClose={() => setNetOpen(false)} />}
     </main>

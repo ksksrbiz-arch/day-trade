@@ -1,73 +1,132 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
+/* ============================================================
+   PLATFORM BRAIN — design system v2  (neural command-center)
+   Refined dark HUD: aurora depth, glass + gradient borders,
+   restrained accents, tighter type. Every legacy class name is
+   preserved so all panels restyle automatically.
+   ============================================================ */
 :root{
-  --cyan:#36e2ff; --amber:#ffb43b; --txt:#dbe7f2; --muted:#7e93a8; --dim:#48586b;
-  --line:rgba(54,226,255,.22); --glass:rgba(8,15,26,.55);
+  /* core palette */
+  --cyan:#3cf0e4; --cyan-deep:#19b9c4; --teal:#2fe6c8;
+  --violet:#a78bfa; --amber:#ffbf4d; --blue:#4aa8ff;
+  --pos:#2fe6a0; --neg:#ff5d6c; --warn:#ffbf4d;
+  /* text */
+  --txt:#e9f2f8; --muted:#8ea6bb; --dim:#516073;
+  /* surfaces + lines */
+  --bg0:#04070e; --bg1:#070d18; --panel-a:rgba(10,18,30,.62); --panel-b:rgba(8,14,24,.42);
+  --line:rgba(96,214,230,.18); --line-soft:rgba(140,180,210,.10);
+  --glow:0 0 18px rgba(60,240,228,.28);
+  --radius:12px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#04060c;color:var(--txt);overflow:hidden;
-  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
-.mono{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums}
+html,body{margin:0;height:100%;color:var(--txt);overflow:hidden;
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;letter-spacing:.1px;
+  background:var(--bg0);}
+.mono{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;letter-spacing:0}
 
-/* full-screen scanline + vignette overlay (pointer-through) */
-body::after{content:"";position:fixed;inset:0;z-index:5;pointer-events:none;
-  background:repeating-linear-gradient(0deg,rgba(54,226,255,.025) 0px,rgba(54,226,255,.025) 1px,transparent 2px,transparent 4px);
+/* ---- layered ambient background: drifting aurora + fine grid ---- */
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(120% 90% at 12% -10%, rgba(60,240,228,.14), transparent 55%),
+    radial-gradient(110% 90% at 100% 8%, rgba(167,139,250,.13), transparent 52%),
+    radial-gradient(120% 120% at 50% 120%, rgba(74,168,255,.10), transparent 55%),
+    linear-gradient(180deg,#050a14 0%,#04070e 60%,#03050b 100%);
+  animation:aurora 24s ease-in-out infinite alternate;}
+@keyframes aurora{
+  0%{filter:hue-rotate(0deg) saturate(1)}
+  100%{filter:hue-rotate(-14deg) saturate(1.15)}}
+
+/* faint scan grain — much softer than before */
+body::after{content:"";position:fixed;inset:0;z-index:6;pointer-events:none;
+  background:repeating-linear-gradient(0deg,rgba(120,200,220,.018) 0,rgba(120,200,220,.018) 1px,transparent 2px,transparent 5px);
   mix-blend-mode:screen;opacity:.5;}
 
+/* ---- HUD panels: glass, gradient hairline border, soft depth ---- */
 .hud{position:fixed;z-index:10}
-.panel{background:var(--glass);backdrop-filter:blur(14px) saturate(1.2);
-  border:1px solid var(--line);border-radius:4px;padding:13px 15px;font-size:12px;
-  box-shadow:0 0 0 1px rgba(0,0,0,.4),0 14px 50px rgba(0,0,0,.6),inset 0 0 30px rgba(54,226,255,.04);}
-/* corner brackets */
-.panel::before,.panel::after{content:"";position:absolute;width:14px;height:14px;pointer-events:none}
-.panel::before{top:-1px;left:-1px;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan)}
-.panel::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--cyan);border-right:2px solid var(--cyan)}
+.panel{position:relative;
+  background:linear-gradient(158deg,var(--panel-a),var(--panel-b));
+  backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);
+  border:1px solid transparent;border-radius:var(--radius);padding:14px 16px;font-size:12px;
+  background-clip:padding-box;
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset,
+             0 18px 60px rgba(0,0,0,.55),
+             0 0 0 1px rgba(0,0,0,.35);
+  animation:panelin .55s cubic-bezier(.2,.7,.2,1) both;}
+/* gradient border ring */
+.panel::before{content:"";position:absolute;inset:0;border-radius:var(--radius);padding:1px;pointer-events:none;
+  background:linear-gradient(150deg,rgba(60,240,228,.55),rgba(167,139,250,.25) 40%,transparent 70%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;opacity:.7;transition:opacity .3s}
+/* top sheen */
+.panel::after{content:"";position:absolute;left:14px;right:14px;top:0;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(180,240,255,.4),transparent);opacity:.5}
+.panel:hover::before{opacity:1}
+@keyframes panelin{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 
-.tl{top:16px;left:16px;width:268px}
-.bl{bottom:16px;left:16px;width:240px}
-.tr{top:16px;right:16px;width:312px}
-.br{bottom:16px;right:16px;width:360px}
-.tc{top:16px;left:50%;transform:translateX(-50%);text-align:center;padding:8px 22px}
+.tl{top:18px;left:18px;width:274px}
+.bl{bottom:18px;left:18px;width:246px}
+.tr{top:18px;right:18px;width:318px}
+.br{bottom:18px;right:18px;width:366px}
+.tc{top:18px;left:50%;transform:translateX(-50%);text-align:center;padding:10px 26px}
 
-.title{font-weight:800;letter-spacing:2px;font-size:13px;display:flex;align-items:center;gap:10px}
-.subt{color:var(--cyan);font-size:9px;letter-spacing:3px;text-transform:uppercase;opacity:.8;margin-top:2px}
+/* ---- typography ---- */
+.title{font-weight:800;letter-spacing:1.5px;font-size:13px;display:flex;align-items:center;gap:10px;
+  background:linear-gradient(90deg,#eafcff,#bfeaf2);-webkit-background-clip:text;background-clip:text;color:transparent;
+  text-shadow:0 0 18px rgba(60,240,228,.18)}
+.subt{color:var(--cyan);font-size:9px;letter-spacing:3.5px;text-transform:uppercase;opacity:.75;margin-top:3px}
 .muted{color:var(--muted)} .dim{color:var(--dim)}
 .row{display:flex;align-items:center;gap:8px}
-.hdr{font-size:9px;letter-spacing:2.5px;color:var(--cyan);text-transform:uppercase;opacity:.85}
-.btn{background:rgba(54,226,255,.06);border:1px solid var(--line);color:var(--txt);
-  border-radius:3px;padding:5px 11px;font-size:10px;font-weight:600;letter-spacing:.5px;cursor:pointer;
-  text-transform:uppercase;transition:all .15s}
-.btn:hover{background:rgba(54,226,255,.18);box-shadow:0 0 12px rgba(54,226,255,.4)}
-.legrow{display:flex;align-items:center;gap:9px;padding:4px 2px;cursor:pointer;user-select:none;transition:opacity .15s}
-.legrow:hover{background:rgba(54,226,255,.06)}
-.swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.hdr{font-size:9px;letter-spacing:2.5px;color:var(--cyan);text-transform:uppercase;opacity:.9;
+  display:flex;align-items:center;gap:8px}
+.hdr::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+
+/* ---- controls ---- */
+.btn{background:linear-gradient(180deg,rgba(60,240,228,.10),rgba(60,240,228,.04));
+  border:1px solid var(--line);color:var(--txt);
+  border-radius:8px;padding:5px 11px;font-size:10px;font-weight:600;letter-spacing:.6px;cursor:pointer;
+  text-transform:uppercase;transition:transform .12s,box-shadow .2s,background .2s,border-color .2s}
+.btn:hover{background:linear-gradient(180deg,rgba(60,240,228,.24),rgba(60,240,228,.08));
+  border-color:rgba(60,240,228,.5);box-shadow:0 0 16px rgba(60,240,228,.35);transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.legrow{display:flex;align-items:center;gap:9px;padding:4px 6px;cursor:pointer;user-select:none;
+  border-radius:7px;transition:background .15s}
+.legrow:hover{background:rgba(60,240,228,.08)}
+.swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 .swatch.sm{width:7px;height:7px;border-radius:50%}
-.feed{max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:6px}
-.ev{display:flex;align-items:center;gap:7px;font-size:11px}
+.feed{max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:5px;margin-top:7px}
+.ev{display:flex;align-items:center;gap:7px;font-size:11px;padding:2px 4px;border-radius:6px;
+  transition:background .15s}
+.ev:hover{background:rgba(140,180,210,.06)}
 .evk{color:var(--muted);width:78px;flex-shrink:0;font-size:10px}
 .big{font-size:26px;font-weight:800;letter-spacing:1px}
 input[type=range]{accent-color:var(--cyan);height:3px}
-::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(54,226,255,.25);border-radius:6px}
-.reactor{filter:drop-shadow(0 0 6px var(--cyan))}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
-.live-dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.8s infinite}
+input::placeholder{color:var(--dim)}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:linear-gradient(var(--cyan-deep),var(--violet));border-radius:8px;
+  border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
 
-/* ---- Stark interface fine-tuning ---- */
-/* animated scan-sweep beam travelling down the viewport */
-body::before{content:"";position:fixed;left:0;right:0;top:0;height:160px;z-index:6;pointer-events:none;
-  background:linear-gradient(180deg,transparent,rgba(54,226,255,.07),transparent);
-  mix-blend-mode:screen;animation:scansweep 7.5s linear infinite;}
-@keyframes scansweep{0%{transform:translateY(-200px)}100%{transform:translateY(102vh)}}
-/* viewport targeting frame with corner ticks */
-.stark-frame{position:fixed;inset:9px;z-index:8;pointer-events:none;border:1px solid rgba(54,226,255,.07);border-radius:7px}
-.stark-frame i{position:absolute;width:24px;height:24px;opacity:.55}
-.stark-frame i.tl{top:-1px;left:-1px;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan)}
-.stark-frame i.tr{top:-1px;right:-1px;border-top:2px solid var(--cyan);border-right:2px solid var(--cyan)}
-.stark-frame i.bl{bottom:-1px;left:-1px;border-bottom:2px solid var(--cyan);border-left:2px solid var(--cyan)}
-.stark-frame i.br{bottom:-1px;right:-1px;border-bottom:2px solid var(--cyan);border-right:2px solid var(--cyan)}
-.title{text-shadow:0 0 12px rgba(54,226,255,.35)}
-.panel{animation:panelin .5s ease}
-@keyframes panelin{from{opacity:0}to{opacity:1}}
-.hdr{position:relative}
-.subt{animation:pulse 3.5s infinite}
+/* ---- status + motion primitives ---- */
+.reactor{filter:drop-shadow(0 0 8px var(--cyan))}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+.live-dot{width:8px;height:8px;border-radius:50%;animation:pulse 1.8s infinite}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)}
+
+/* ---- ambient scan sweep (subtle, single soft beam) ---- */
+.stark-sweep{content:"";position:fixed;left:0;right:0;top:0;height:220px;z-index:4;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(60,240,228,.05),transparent);
+  mix-blend-mode:screen;animation:scansweep 9s linear infinite;}
+@keyframes scansweep{0%{transform:translateY(-260px)}100%{transform:translateY(104vh)}}
+
+/* ---- viewport targeting frame (refined, dimmer) ---- */
+.stark-frame{position:fixed;inset:11px;z-index:8;pointer-events:none;
+  border:1px solid rgba(96,214,230,.06);border-radius:14px}
+.stark-frame i{position:absolute;width:22px;height:22px;opacity:.5}
+.stark-frame i.tl{top:-1px;left:-1px;border-top:1.5px solid var(--cyan);border-left:1.5px solid var(--cyan);border-top-left-radius:14px}
+.stark-frame i.tr{top:-1px;right:-1px;border-top:1.5px solid var(--cyan);border-right:1.5px solid var(--cyan);border-top-right-radius:14px}
+.stark-frame i.bl{bottom:-1px;left:-1px;border-bottom:1.5px solid var(--cyan);border-left:1.5px solid var(--cyan);border-bottom-left-radius:14px}
+.stark-frame i.br{bottom:-1px;right:-1px;border-bottom:1.5px solid var(--cyan);border-right:1.5px solid var(--cyan);border-bottom-right-radius:14px}
+.subt{animation:pulse 3.6s infinite}
