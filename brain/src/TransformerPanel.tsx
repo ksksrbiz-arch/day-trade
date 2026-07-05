@@ -249,7 +249,7 @@ export default function TransformerPanel() {
 
 const panelStyle: React.CSSProperties = {
   position: "fixed", right: 18, top: 92, width: 300, padding: 15,
-  background: "linear-gradient(158deg, rgba(10,18,30,0.66), rgba(8,14,24,0.46))",
+  background: "linear-gradient(158deg, rgba(9,15,26,0.94), rgba(7,12,22,0.86))",
   border: "1px solid rgba(96,214,230,0.28)", borderRadius: 12,
   backdropFilter: "blur(18px) saturate(1.2)", WebkitBackdropFilter: "blur(18px) saturate(1.2)",
   color: "#e9f2f8", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", zIndex: 50,

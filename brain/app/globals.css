@@ -14,7 +14,7 @@
   /* text */
   --txt:#e9f2f8; --muted:#8ea6bb; --dim:#516073;
   /* surfaces + lines */
-  --bg0:#04070e; --bg1:#070d18; --panel-a:rgba(10,18,30,.62); --panel-b:rgba(8,14,24,.42);
+  --bg0:#04070e; --bg1:#070d18; --panel-a:rgba(9,15,26,.90); --panel-b:rgba(7,12,22,.80);
   --line:rgba(96,214,230,.18); --line-soft:rgba(140,180,210,.10);
   --glow:0 0 18px rgba(60,240,228,.28);
   --radius:12px;
