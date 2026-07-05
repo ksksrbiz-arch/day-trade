@@ -63,11 +63,15 @@ def _price_fn(sym, asset, day, horizon):
             p = history.load_panel([sym], days=400, source="coinex")
             ser = list(zip(p["dates"], p["prices"].get(sym, [])))
         else:
-            from .crsp import query as crsp
-            ser = [(b["date"], b["close"]) for b in crsp.get_prices(sym, "2024-01-01", None) if b.get("close")]
-            if len(ser) < 30:                    # empty CRSP (cloud) -> Alpaca IEX daily bars
-                from .ml.dataset import _alpaca_series
-                ser = _alpaca_series(sym)
+            # Alpaca IEX daily bars are the source the decision store is logged
+            # from, so resolve against the SAME series first (cloud CRSP is empty
+            # or stale and would not cover the backfilled dates). CRSP is only a
+            # local fallback when Alpaca keys are absent.
+            from .ml.dataset import _alpaca_series
+            ser = _alpaca_series(sym)
+            if len(ser) < 30:
+                from .crsp import query as crsp
+                ser = [(b["date"], b["close"]) for b in crsp.get_prices(sym, "2024-01-01", None) if b.get("close")]
     except Exception:  # noqa: BLE001
         return None
     if not ser:
