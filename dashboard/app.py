@@ -1086,8 +1086,6 @@ async def transformer_stream():
                                       "X-Accel-Buffering": "no"})
 
 
-_PRETRAIN_RUN = {"running": False, "started": None, "last": None}
-
 
 @app.get("/api/pretrain/status")
 def pretrain_status():
@@ -1097,37 +1095,24 @@ def pretrain_status():
         st = pretrain.status()
     except Exception as e:  # noqa: BLE001
         st = {"error": str(e)[:160]}
-    st["run_state"] = {k: _PRETRAIN_RUN[k] for k in ("running", "started", "last")}
     return st
 
 
 @app.get("/api/pretrain/run")
 def pretrain_run(max_symbols: int = 24, step: int = 5, horizon: int = 10, warmup: int = 70):
-    """Kick off a historical cold-start of the fusion brain in the background.
+    """Run a historical cold-start of the fusion brain and return the result.
 
-    Idempotent + paper-only: it only backfills the training-decision store from
-    point-in-time historical voices and trains the champion/challenger-gated
-    fusion layers. Returns immediately; poll /api/pretrain/status to watch."""
-    import threading
-    import time as _t
-    if _PRETRAIN_RUN["running"]:
-        return {"started": False, "reason": "already running", "since": _PRETRAIN_RUN["started"]}
-
-    def _job():
-        try:
-            from trader import pretrain
-            _PRETRAIN_RUN["last"] = pretrain.run(max_symbols=max_symbols, step=step,
-                                                 horizon=horizon, warmup=warmup)
-        except Exception as e:  # noqa: BLE001
-            _PRETRAIN_RUN["last"] = {"ok": False, "error": str(e)[:200]}
-        finally:
-            _PRETRAIN_RUN["running"] = False
-
-    _PRETRAIN_RUN["running"] = True
-    _PRETRAIN_RUN["started"] = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
-    threading.Thread(target=_job, daemon=True).start()
-    return {"started": True, "at": _PRETRAIN_RUN["started"],
-            "note": "backfilling history + training fusion layers; poll /api/pretrain/status"}
+    Idempotent + paper-only: backfills the training-decision store from
+    point-in-time historical voices (dedup'd, so re-runs add ~0 rows) and trains
+    the champion/challenger-gated fusion layers. Runs synchronously -- the
+    backfill is cheap on re-run and training on the resolved rows takes a few
+    seconds -- so the response carries the real training metrics or error."""
+    try:
+        from trader import pretrain
+        return pretrain.run(max_symbols=max_symbols, step=step, horizon=horizon, warmup=warmup)
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        return {"ok": False, "error": str(e)[:300], "trace": traceback.format_exc()[-800:]}
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
