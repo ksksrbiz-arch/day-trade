@@ -1037,8 +1037,17 @@ def learning():
         except Exception:  # noqa: BLE001
             pass
         br = out.get("breaker", {}) or {}
+        eq_hist = []
+        try:
+            import json as _json
+            raw = _st.kv_get("equity_hist", "[]")
+            eq_hist = _json.loads(raw) if isinstance(raw, str) else (raw or [])
+        except Exception:  # noqa: BLE001
+            eq_hist = []
         out["risk"] = {"aggression": round(aggr, 2), "edge": round(edge, 4),
-                       "equity": br.get("eq"), "high_water": br.get("hw"), "drawdown": br.get("dd")}
+                       "equity": br.get("eq"), "high_water": br.get("hw"), "drawdown": br.get("dd"),
+                       "aggression_reco": _st.kv_get("aggression_reco", None),
+                       "equity_history": eq_hist[-120:]}
     except Exception:  # noqa: BLE001
         out["risk"] = {}
     return out

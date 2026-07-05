@@ -125,6 +125,44 @@ def generate(n, ctx: str = "") -> list:
     return _random_hypotheses(n)
 
 
+def _agg_curve(strat, path, aggression: float, risk_frac: float = 0.06):
+    """Replay labels with PERCENT-OF-EQUITY sizing at a given aggression so higher
+    aggression compounds -- and is genuinely punished by drawdown/ruin. Returns
+    (total_return, max_drawdown)."""
+    eq, peak, maxdd = 1.0, 1.0, 0.0
+    open_syms: set = set()
+    for rec in load_records(path):
+        ld = rec["label"]
+        label = Label(tickers=[t.upper() for t in ld.get("tickers", [])],
+                      sentiment=float(ld.get("sentiment", 0.0)),
+                      confidence=float(ld.get("confidence", 0.0)),
+                      event_type=ld.get("event_type", "unknown"))
+        intent = decide(label, strat, open_syms)
+        if intent is None:
+            continue
+        entry, exit_ = rec.get("entry_price"), rec.get("exit_price")
+        if not entry:
+            continue
+        r = (exit_ / entry - 1.0) if intent.side == "buy" else (entry / exit_ - 1.0)
+        stake = min(0.9, aggression * risk_frac)
+        eq *= (1.0 + stake * r)
+        peak = max(peak, eq)
+        maxdd = max(maxdd, (peak - eq) / peak if peak else 0.0)
+    return round(eq - 1.0, 4), round(maxdd, 4)
+
+
+def sweep_aggression(strat, path):
+    """Find the aggression that maximizes risk-adjusted COMPOUNDING return."""
+    best_a, best_s, rows = 0.6, -9.9, []
+    for a in (0.4, 0.7, 1.0, 1.3, 1.6):
+        ret, dd = _agg_curve(strat, path, a)
+        score = round(ret - 0.7 * dd, 4)
+        rows.append({"aggression": a, "return": ret, "maxdd": dd, "score": score})
+        if score > best_s:
+            best_a, best_s = a, score
+    return best_a, rows
+
+
 def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     """Generate -> backtest -> rank -> (auto) promote the best if it beats
     baseline AND the benchmark. Returns the leaderboard; persists + publishes."""
@@ -184,7 +222,19 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
                                        f"{best['vs_benchmark'] - base_vs:+.3f} vs SPY ({best['rationale']})")
             promoted = best["params"]
 
+    # PROFIT-SEEKING risk appetite: search the aggression dial on the winning
+    # config (compounding model), and record the recommendation for the desk.
+    agg_reco, agg_rows = 0.6, []
+    try:
+        best_params = best.get("params") or {}
+        agg_reco, agg_rows = sweep_aggression(_apply(cfg.strategy, best_params), path)
+        from .agents import state as _st
+        _st.kv_set("aggression_reco", max(0.2, min(1.2, agg_reco)))
+    except Exception:  # noqa: BLE001
+        pass
+
     result = {"ok": True, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "aggression_reco": agg_reco, "aggression_sweep": agg_rows,
               "baseline_vs_benchmark": round(base_vs, 4), "leaderboard": ranked[:n + 1],
               "promoted": promoted, "winner": winner}
     try:

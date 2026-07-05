@@ -79,6 +79,17 @@ def circuit_breaker_check() -> dict:
         if eq > hw:
             state.kv_set("autonomy_hw", eq); hw = eq
         dd = (hw - eq) / hw * 100.0 if hw > 0 else 0.0
+        # append to the durable equity curve (P&L sparkline source), capped + dedup'd
+        try:
+            import json as _json
+            hist = state.kv_get("equity_hist", "[]")
+            pts = _json.loads(hist) if isinstance(hist, str) else (hist or [])
+            now = int(_t.time())
+            if not pts or now - int(pts[-1][0]) >= 900 or abs(float(pts[-1][1]) - eq) > 1.0:
+                pts.append([now, round(eq, 2)])
+                state.kv_set("equity_hist", _json.dumps(pts[-240:]))
+        except Exception:  # noqa: BLE001
+            pass
         if dd >= max_dd and not policy()["kill_switch"]:
             set_policy(kill_switch=True)
             _audit({"action": "circuit_breaker", "status": "applied",
@@ -461,9 +472,18 @@ def _ap_tune_aggression(p):
         nxt = cur - 0.10                    # no edge -> back off
     else:
         nxt = cur
+    # blend in the hypothesis lab's compounding-backtest recommendation
+    reco = None
+    try:
+        reco = state.kv_get("aggression_reco", None)
+        if reco is not None:
+            nxt = 0.6 * nxt + 0.4 * float(reco)
+    except Exception:  # noqa: BLE001
+        pass
     nxt = max(0.2, min(1.2, round(nxt, 2)))
     state.kv_set("aggression", nxt); state.kv_set("aggr_last", _t.time())
-    return {"aggression": nxt, "from": round(cur, 2), "edge": round(edge, 4), "dd": round(dd, 2)}
+    return {"aggression": nxt, "from": round(cur, 2), "edge": round(edge, 4),
+            "dd": round(dd, 2), "lab_reco": reco}
 
 
 def _ev_discover_strategy():
