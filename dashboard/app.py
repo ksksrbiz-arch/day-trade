@@ -1152,4 +1152,14 @@ def api_factors():
         return {"ranking": [], "error": str(e)[:160]}
 
 
+@app.get("/api/calibration")
+def api_calibration():
+    """Meta-labeler + probability-calibration card (Brier before/after)."""
+    try:
+        from trader import calibrate
+        return calibrate.card()
+    except Exception as e:  # noqa: BLE001
+        return {"trained": False, "error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

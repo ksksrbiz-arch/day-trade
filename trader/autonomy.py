@@ -572,6 +572,29 @@ def _ap_scan_catalysts(p):
     return res
 
 
+def _ev_calibrate_meta():
+    """Train the probability calibrator + meta-labeler on the resolved-decision
+    store once enough matured decisions exist and the model is stale/untrained.
+    Auto-safe: fits only on realized outcomes, influences sizing not gating."""
+    try:
+        from . import calibrate  # noqa: F401
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"calibrate unavailable: {str(e)[:60]}"}
+    n = _cortex_samples()
+    if n < 30:
+        return {"eligible": False, "reason": f"only {n} resolved decisions (need 30)"}
+    age = _age_h(calibrate.META_PATH)
+    if age is not None and age < 72:
+        return {"eligible": False, "reason": f"calibrator fresh ({age}h)"}
+    return {"eligible": True, "reason": f"train meta-labeler + calibration on {n} decisions",
+            "proposal": {"kind": "calibrate_meta"}}
+
+
+def _ap_calibrate_meta(p):
+    from . import calibrate
+    return calibrate.train()
+
+
 ACTIONS = {
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
                              "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
@@ -599,6 +622,8 @@ ACTIONS = {
                              "auto_safe": True, "desc": "train the neural core when untrained/stale (champion-gated)"},
     "scan_catalysts":       {"evaluate": _ev_scan_catalysts, "apply": _ap_scan_catalysts,
                              "auto_safe": True, "desc": "scan momentum catalysts + arm the watch/strike list"},
+    "calibrate_meta":       {"evaluate": _ev_calibrate_meta, "apply": _ap_calibrate_meta,
+                             "auto_safe": True, "desc": "calibrate probabilities + train the meta-labeler"},
     "prune_data_logs":      {"evaluate": _ev_prune_data_logs, "apply": _ap_prune_logs,
                              "auto_safe": True, "desc": "prune growth-prone logs to stay bounded"},
     "relax_selectivity":    {"evaluate": _ev_relax_selectivity, "apply": _ap_param,
