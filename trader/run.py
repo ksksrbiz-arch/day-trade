@@ -148,7 +148,7 @@ def _day_inc():
     _day_state["n"] += 1
 
 
-def _risk_scale(cfg, conf: float = 0.6):
+def _risk_scale(cfg, conf: float = 0.6, symbol: str | None = None, p_up: float | None = None):
     """Conviction-scaled risk. DOWN-size on no-edge / stress (capital preservation);
     LEAN IN (up-size) only where there's real measured edge + high conviction + a
     favorable tape, dialed by AGGRESSION (0..1.5). The drawdown breaker sits below
@@ -182,11 +182,21 @@ def _risk_scale(cfg, conf: float = 0.6):
     if edge > 0.02 and rg in ("risk_on", "neutral") and conf >= 0.65:
         lean = 1.0 + aggression * min(1.0, edge / 0.05) * min(1.0, (conf - 0.6) / 0.3)
         scale *= lean; why.append(f"lean-in x{lean:.2f}")
+    # PRINCIPLED SIZING: volatility-target x fractional-Kelly (bounded, under the
+    # breaker). Sizes inversely to realized vol and by calibrated edge (p_up from
+    # the meta-labeler when available, else conviction).
+    if symbol:
+        try:
+            from . import sizing
+            _sm, _sw = sizing.size_multiplier(symbol, conf, p_up=p_up)
+            scale *= _sm; why.append(_sw)
+        except Exception:  # noqa: BLE001
+            pass
     cap = 1.0 + aggression * 1.6
     return max(0.1, min(cap, round(scale, 3))), ", ".join(why) or "full size"
 
 
-def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
+def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6, p_up: float | None = None):
     """Route a confirmed Intent to options (1 ATM contract) or equity bracket.
     Returns (order_id, instrument, exec_symbol, note)."""
     _instr = "option" if (cfg.strategy.use_options and optbroker is not None) else ("crypto" if is_crypto(intent.symbol) else "equity")
@@ -201,7 +211,7 @@ def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6):
     if _v["decision"] != "approve":
         return None, _instr, intent.symbol, "POLICY-" + _v["decision"] + ": " + "; ".join(_v["reasons"])[:110]
     _day_inc()
-    _sc, _why = _risk_scale(cfg, conf)
+    _sc, _why = _risk_scale(cfg, conf, getattr(intent, 'symbol', None), p_up)
     if _sc < 1.0:
         try:
             intent.notional = round(float(intent.notional) * _sc, 2)
@@ -301,7 +311,13 @@ def run_news(cfg, labeler, broker, md, groq, cs, optbroker, omni=None) -> int:
         intent.notional = round(intent.notional * max(0.3, min(2.0, _pm)), 2)
         if conv is not None and cfg.strategy.confluence_size and conv.size_mult > 0:
             intent.notional = round(intent.notional * conv.size_mult, 2)
-        oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg)
+        _pup = None                              # meta-labeler P(winner) -> Kelly sizing
+        try:
+            from .calibrate import p_correct as _pc
+            _pup = _pc(conv.scores) if conv is not None else None
+        except Exception:  # noqa: BLE001
+            _pup = None
+        oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
         open_syms.add(intent.symbol)
         _last_entry[intent.symbol] = time.time()
         acted += 1
@@ -431,7 +447,13 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
         intent.notional = round(intent.notional * max(0.3, min(2.0, _pm)), 2)
         if conv is not None and cfg.strategy.confluence_size and conv.size_mult > 0:
             intent.notional = round(intent.notional * conv.size_mult, 2)
-        oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg)
+        _pup = None                              # meta-labeler P(winner) -> Kelly sizing
+        try:
+            from .calibrate import p_correct as _pc
+            _pup = _pc(conv.scores) if conv is not None else None
+        except Exception:  # noqa: BLE001
+            _pup = None
+        oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
         open_syms.add(sym)
         _last_entry[sym] = time.time()
         acted += 1

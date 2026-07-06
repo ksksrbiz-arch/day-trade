@@ -49,6 +49,7 @@ _KNOB_TO_FIELD = {
 PROMOTE_MARGIN = 0.005   # winner must beat baseline vs_benchmark by >= 0.5 pts
 MIN_TRADES = 8
 T_MIN = 1.5                    # min t-stat to promote -- edge must clear the noise floor
+DSR_MIN = 0.90                 # min deflated Sharpe -- edge must survive multiple-testing
 
 
 def _clamp(name, v):
@@ -94,6 +95,8 @@ def _evaluate(strat, path, benchmark=0.0) -> dict:
                 for t in broker.closed if getattr(t, "entry_price", None)]
         sig = stats.summarize(rets)
         m["t_stat"] = sig["t"]; m["net_ev"] = sig["net_ev"]; m["significant"] = sig["significant"]
+        from . import cv as _cv
+        m["sharpe"] = round(_cv.sharpe(rets), 4); m["n_ret"] = len(rets)
     except Exception:  # noqa: BLE001
         m.setdefault("t_stat", 0.0); m.setdefault("significant", False)
     return m
@@ -190,7 +193,8 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
               "vs_benchmark": round(base_vs, 4), "total_return": round(base.get("total_return", 0.0), 4),
               "win_rate": round(base.get("win_rate", 0.0), 3), "trades": base.get("trades", 0),
               "max_drawdown": round(base.get("max_drawdown", 0.0), 4),
-              "t_stat": round(base.get("t_stat", 0.0), 2), "significant": base.get("significant", False)}]
+              "t_stat": round(base.get("t_stat", 0.0), 2), "significant": base.get("significant", False),
+              "sharpe": round(base.get("sharpe", 0.0), 3), "n_ret": base.get("n_ret", 0)}]
     ctx = f"baseline vs_benchmark={base_vs:.3f} trades={base.get('trades')}"
     for h in generate(n, ctx):
         m = _evaluate(_apply(cfg.strategy, h["params"]), path, benchmark)
@@ -199,7 +203,8 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
                       "total_return": round(m.get("total_return", 0.0), 4),
                       "win_rate": round(m.get("win_rate", 0.0), 3), "trades": m.get("trades", 0),
                       "max_drawdown": round(m.get("max_drawdown", 0.0), 4),
-                      "t_stat": round(m.get("t_stat", 0.0), 2), "significant": m.get("significant", False)})
+                      "t_stat": round(m.get("t_stat", 0.0), 2), "significant": m.get("significant", False),
+                      "sharpe": round(m.get("sharpe", 0.0), 3), "n_ret": m.get("n_ret", 0)})
 
     # PROFIT-SEEKING objective: reward risk-adjusted RETURN (not just beating SPY),
     # so the search explores higher-return regions -- while promotion still
@@ -211,12 +216,27 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
     base_ps = next((_r["profit_score"] for _r in board if _r["name"] == "baseline"), 0.0)
     ranked = sorted(board, key=lambda r: r["profit_score"], reverse=True)
     best = ranked[0]
+    # DEFLATED SHARPE: correct the winner's Sharpe for the number of hypotheses
+    # tried (selection bias). n_trials = strategies tested; sr_trials_std = spread
+    # of their Sharpes. dsr > ~0.9 => the edge survives multiple-testing.
+    dsr = {"dsr": 0.0}
+    try:
+        import numpy as _np
+        from . import cv as _cv
+        sharpes = [r.get("sharpe", 0.0) for r in board]
+        sr_std = float(_np.std(sharpes)) if len(sharpes) > 1 else None
+        dsr = _cv.deflated_sharpe_from_stats(best.get("sharpe", 0.0), best.get("n_ret", 0),
+                                             n_trials=len(board), sr_trials_std=sr_std)
+        best["dsr"] = dsr["dsr"]
+    except Exception:  # noqa: BLE001
+        best["dsr"] = 0.0
     promoted = None
     winner = (best["name"] != "baseline"
               and best["vs_benchmark"] > 0                      # must still beat SPY
               and best["profit_score"] >= base_ps + PROMOTE_MARGIN
               and best["trades"] >= MIN_TRADES
-              and best.get("t_stat", 0.0) >= T_MIN)             # edge must clear the noise floor
+              and best.get("t_stat", 0.0) >= T_MIN              # edge clears the noise floor
+              and best.get("dsr", 0.0) >= DSR_MIN)              # ...and survives multiple-testing
 
     if winner:
         try:
@@ -257,6 +277,7 @@ def run(n: int = 6, path: str | None = None, benchmark: float = 0.0) -> dict:
         _verdict = ""
     result = {"ok": True, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
               "aggression_reco": agg_reco, "aggression_sweep": agg_rows, "verdict": _verdict,
+              "deflated_sharpe": best.get("dsr", 0.0),
               "baseline_vs_benchmark": round(base_vs, 4), "leaderboard": ranked[:n + 1],
               "promoted": promoted, "winner": winner}
     try:

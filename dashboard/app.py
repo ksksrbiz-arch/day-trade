@@ -1142,4 +1142,14 @@ def api_scanner(arm: bool = False, fade: bool = False, n: int = 8, min_conf: flo
         return {"catalysts": [], "error": str(e)[:160]}
 
 
+@app.get("/api/factors")
+def api_factors():
+    """Cross-sectional factor ranking (momentum/reversal/low-vol/trend z-scores)."""
+    try:
+        from trader import factors
+        return {"ranking": factors.ranking()}
+    except Exception as e:  # noqa: BLE001
+        return {"ranking": [], "error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

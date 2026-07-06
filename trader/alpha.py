@@ -25,12 +25,12 @@ from statistics import fmean
 # Regime -> method weight multipliers. Trend regimes trust price/quant momentum;
 # stress trusts fundamentals (quality) and shrinks risk; ranges balance.
 _REGIME_W = {
-    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "alpha_engine": 1.0, "cortex": 1.2},
-    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "alpha_engine": 1.2, "cortex": 1.1},
-    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "alpha_engine": 1.2, "cortex": 1.0},
-    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "alpha_engine": 1.0, "cortex": 1.2},
+    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.2},
+    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "alpha_engine": 1.2, "cortex": 1.1, "factors": 1.0},
+    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "alpha_engine": 1.2, "cortex": 1.0, "factors": 0.85},
+    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.1},
 }
-_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "alpha_engine": 0.14, "cortex": 0.30}
+_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "alpha_engine": 0.14, "cortex": 0.30, "factors": 0.24}
 
 _emph_cache = {"ts": 0.0, "val": None}
 
@@ -69,14 +69,14 @@ def _norm(weights: dict, present: set[str]) -> dict:
 
 
 def confluence(ta=None, quant=None, fundamental=None, council=None, ml=None,
-               prediction=None, tnet=None, alpha_engine=None, cortex=None,
+               prediction=None, tnet=None, alpha_engine=None, cortex=None, factors=None,
                regime: str | None = None, min_agree: int = 2,
                min_composite: float = 0.20, size_min: float = 0.5,
                size_max: float = 2.0) -> Conviction:
     """Blend method scores (each in [-1,1], or None if unavailable)."""
     raw = {"ta": ta, "quant": quant, "fundamental": fundamental, "council": council,
            "ml": ml, "prediction": prediction, "tnet": tnet, "alpha_engine": alpha_engine,
-           "cortex": cortex}
+           "cortex": cortex, "factors": factors}
     # human-in-the-loop voice overrides (mute drops a voice; pin locks its weight)
     try:
         from . import voices as _voices
@@ -168,6 +168,13 @@ def analyze(closes: list[float], panel: dict | None = None,
             tnet_score = _tn.score_signal(symbol)
         except Exception:  # noqa: BLE001
             tnet_score = None
+    factors_score = None                       # cross-sectional (relative-strength) voice
+    if symbol:
+        try:
+            from . import factors as _fac
+            factors_score = _fac.score_signal(symbol)
+        except Exception:  # noqa: BLE001
+            factors_score = None
     if alpha_engine_score is None and use_alpha_engine and symbol:
         try:
             from . import alpha_engine as _ae
@@ -191,7 +198,7 @@ def analyze(closes: list[float], panel: dict | None = None,
     conv = confluence(ta=ta_score, quant=quant_score,
                       fundamental=fundamental_score, council=council_score,
                       ml=ml_score, prediction=prediction_score, tnet=tnet_score,
-                      alpha_engine=alpha_engine_score,
+                      alpha_engine=alpha_engine_score, factors=factors_score,
                       cortex=cortex_score, regime=regime, **gate_kwargs)
     if symbol:                                  # capture the 'why' for the reasoning trace
         try:

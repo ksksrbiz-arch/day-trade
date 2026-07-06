@@ -55,14 +55,28 @@ def train_once(horizon=10, lookback=60, val_frac=0.25, l2=1.0, epochs=500,
 
     # time-ordered split
     order = np.argsort(dates)
-    X = np.asarray(X)[order]; y = np.asarray(y)[order]
+    X = np.asarray(X)[order]; y = np.asarray(y)[order]; dates = np.asarray(dates)[order]
     cut = int(len(X) * (1 - val_frac))
     Xtr, ytr, Xva, yva = X[:cut], y[:cut], X[cut:], y[cut:]
 
     chal = LogisticModel(names).fit(Xtr, ytr, l2=l2, epochs=epochs)
     pva = chal.proba(Xva)
+    # HONEST generalization estimate: purged, embargoed K-fold CV (no horizon
+    # leakage across the train/test boundary) -- the single time-split AUC is
+    # optimistically biased. We promote on the CV AUC, not the single split.
+    cv = {"cv_auc": round(auc(yva, pva), 4), "cv_std": 0.0, "folds": 0}
+    try:
+        from .. import cv as _cv
+        cv = _cv.cv_auc(X, y, dates.tolist() if hasattr(dates, "tolist") else dates,
+                        horizon,
+                        lambda Xt, yt: LogisticModel(names).fit(Xt, yt, l2=l2, epochs=epochs),
+                        lambda m, Xe: m.proba(Xe), k=5)
+    except Exception:  # noqa: BLE001
+        pass
     metrics = {
-        "auc": round(auc(yva, pva), 4),
+        "auc": cv["cv_auc"],                     # report the honest CV AUC as the headline
+        "auc_split": round(auc(yva, pva), 4),    # keep the old single-split for reference
+        "cv_std": cv.get("cv_std", 0.0), "cv_folds": cv.get("folds", 0),
         "acc": round(accuracy(yva, pva), 4),
         "edge": round(_edge(yva, pva), 4),
         "n_train": int(len(Xtr)), "n_val": int(len(Xva)),
