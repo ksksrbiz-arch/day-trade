@@ -168,7 +168,13 @@ def conflicts() -> list:
 
 def stats() -> dict:
     bs = all_beliefs()
-    return {"n": len(bs), "voice_multipliers": voice_multipliers(),
+    reg = "neutral"
+    try:                                          # show the ACTIVE (current-regime) multipliers
+        from . import market_brain
+        reg = market_brain.cached_regime("neutral")
+    except Exception:  # noqa: BLE001
+        pass
+    return {"n": len(bs), "regime": reg, "voice_multipliers": voice_multipliers(reg),
             "conflicts": len(conflicts()),
             "top": [{"claim": b["claim"], "target": b["target"], "direction": b["direction"],
                      "regime": b["regime"], "confidence": b["eff_confidence"],
