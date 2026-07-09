@@ -761,15 +761,26 @@ def health_full():
         from urllib.parse import urlparse
         from trader.agents import state
         out = {"services": state.kv_get("system_health", {}).get("services", {})}
-        # Pieces LTM reachability (fast socket probe, no hang)
-        url = os.environ.get("PIECES_MCP_URL",
-                             "http://localhost:39300/model_context_protocol/2025-03-26/mcp")
+        # LTM reachability: the platform's durable memory is the local SQLite+CF
+        # store (trader.ltm); Pieces is disabled on the cloud, so probe the REAL
+        # backend in use, not the deprecated localhost:39300 MCP server.
         try:
-            u = urlparse(url); host = u.hostname or "localhost"; port = u.port or 39300
-            s = socket.socket(); s.settimeout(0.8); s.connect((host, port)); s.close()
-            out["ltm_online"] = True
+            from trader import ltm as _ltm
+            _st = _ltm.stats()
+            out["ltm_online"] = "error" not in _st
+            out["ltm"] = {"items": _st.get("items"), "embedded": _st.get("embedded"),
+                          "backend": "local-sqlite+cf"}
         except Exception:
             out["ltm_online"] = False
+        if os.getenv("USE_PIECES", "false").strip().lower() in ("1", "true", "yes", "on"):
+            url = os.environ.get("PIECES_MCP_URL",
+                                 "http://localhost:39300/model_context_protocol/2025-03-26/mcp")
+            try:
+                u = urlparse(url); host = u.hostname or "localhost"; port = u.port or 39300
+                sk = socket.socket(); sk.settimeout(0.8); sk.connect((host, port)); sk.close()
+                out["pieces_online"] = True
+            except Exception:
+                out["pieces_online"] = False
         try:
             from trader.predict import store as pstore
             out["predictions"] = pstore.stats()

@@ -121,7 +121,7 @@ def report(min_decisions: int = MIN_DECISIONS) -> dict:
         voices.append({
             "voice": m,
             "opinions": d["opinions"],
-            "attributed_return_pct": round(d["attr"] * 100, 3),
+            "attributed_return_pct": round(d["attr"] / resolved * 100, 3),   # MEAN per decision
             "lead_decisions": d["lead"],
             "lead_hit_rate": round(d["lead_hits"] / d["lead"], 3) if d["lead"] else None,
             "agree_decisions": d["agree_n"],
@@ -139,15 +139,15 @@ def report(min_decisions: int = MIN_DECISIONS) -> dict:
         summary = (f"Most profitable voice: {best['voice']} "
                    f"({best['attributed_return_pct']:+.2f}% attributed). "
                    f"Least: {worst['voice']} ({worst['attributed_return_pct']:+.2f}%). "
-                   f"Total realized directional return decomposed: {total_dir * 100:+.2f}% "
+                   f"Avg directional return per decision: {total_dir / resolved * 100:+.3f}% "
                    f"over {resolved} decisions.")
     else:
         summary = (f"{resolved} decisions resolved; no voice has {min_decisions} agreeing "
                    f"decisions yet — attribution still maturing. Total directional "
-                   f"return so far: {total_dir * 100:+.2f}%.")
+                   f"return per decision: {total_dir / resolved * 100:+.3f}%.")
 
     return {"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "resolved": resolved, "total_dir_return_pct": round(total_dir * 100, 3),
+            "resolved": resolved, "total_dir_return_pct": round(total_dir / resolved * 100, 3),
             "weights_source": "backprop-learned" if le_trained else "static base",
             "voices": voices, "summary": summary}
 
