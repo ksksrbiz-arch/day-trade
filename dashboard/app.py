@@ -1173,4 +1173,18 @@ def api_calibration():
         return {"trained": False, "error": str(e)[:160]}
 
 
+@app.get("/api/psyche")
+def api_psyche():
+    """The system's internal state (mood/affect/drives), its self-built beliefs,
+    and how the state is modulating behaviour. Honest: a grounded model of an
+    internal state, not literal feeling -- every field maps to a measured cause."""
+    try:
+        from trader import psyche
+        st = psyche.state()
+        st["beliefs"] = psyche.beliefs(8)
+        return st
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

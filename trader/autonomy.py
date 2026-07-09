@@ -561,7 +561,15 @@ def _ap_scan_catalysts(p):
     from . import scanner
     from .agents import state
     import time as _t
-    res = scanner.arm_top(n=6)
+    mn, n = 0.66, 6
+    try:                                          # curiosity widens exploration
+        from . import psyche
+        mod = psyche.state().get("modulation", {})
+        mn = float(mod.get("scan_min_conf", 0.66))
+        n = int(round(6 * float(mod.get("exploration", 1.0))))
+    except Exception:  # noqa: BLE001
+        pass
+    res = scanner.arm_top(n=max(6, min(12, n)), min_conf=mn)
     try:
         state.kv_set("scan_last", _t.time())
         os.makedirs(_DATA, exist_ok=True)
@@ -595,6 +603,36 @@ def _ap_calibrate_meta(p):
     return calibrate.train()
 
 
+def _ev_reflect():
+    """Introspection cadence: periodically the system reflects on its internal
+    state + recent experience and forms/updates durable beliefs in long-term
+    memory (autonomous knowledge-building). Auto-safe: writes to memory only,
+    never touches trading. Runs more often when curious, less when calm."""
+    try:
+        from . import psyche  # noqa: F401
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"psyche unavailable: {str(e)[:60]}"}
+    last = _age_h(os.path.join(_DATA, "reflect_last"))
+    gate = _gate_hours(2, 4)
+    if last is not None and last < gate:
+        return {"eligible": False, "reason": f"reflected recently ({last}h < {gate}h)"}
+    return {"eligible": True, "reason": "reflect on state + update self-knowledge",
+            "proposal": {"kind": "reflect"}}
+
+
+def _ap_reflect(p):
+    from . import psyche
+    import time as _t
+    res = psyche.reflect()
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "reflect_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
 ACTIONS = {
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
                              "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
@@ -620,6 +658,8 @@ ACTIONS = {
                              "auto_safe": True, "desc": "cold-start the fusion brain from historical decisions (one-shot)"},
     "train_cortex":         {"evaluate": _ev_train_cortex, "apply": _ap_train_cortex,
                              "auto_safe": True, "desc": "train the neural core when untrained/stale (champion-gated)"},
+    "reflect":              {"evaluate": _ev_reflect, "apply": _ap_reflect,
+                             "auto_safe": True, "desc": "reflect on internal state + build self-knowledge (beliefs)"},
     "scan_catalysts":       {"evaluate": _ev_scan_catalysts, "apply": _ap_scan_catalysts,
                              "auto_safe": True, "desc": "scan momentum catalysts + arm the watch/strike list"},
     "calibrate_meta":       {"evaluate": _ev_calibrate_meta, "apply": _ap_calibrate_meta,
