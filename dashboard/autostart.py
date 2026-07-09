@@ -1,6 +1,8 @@
 """
-Boot resume: start every bot the user had enabled, creating a default 'main'
-bot the first time. Run by start_all.ps1 after the dashboard comes up.
+Boot resume (cross-platform): start every bot the user had enabled, creating a
+default 'main' bot the first time. Invoked by docker-entrypoint.sh on the cloud
+and by start_all.ps1 on Windows. Idempotent -- start_bot no-ops when the bot's
+PID is already alive, so re-running never double-launches a trade loop.
 """
 from __future__ import annotations
 

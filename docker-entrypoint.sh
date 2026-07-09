@@ -27,10 +27,14 @@ if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   # ML: train an initial model now (fast, Alpaca-backed) + keep it improving
   python -m trader.ml.train >> data/ml_train.log 2>&1 &
   python -m trader.ml.daemon --every 6 >> data/ml.log 2>&1 &
-  # autonomous PAPER trading loop (RSS -> free-reasoner label -> risk-capped paper
-  # bracket orders). Self-halts on the daily drawdown breaker. Disable: RUN_TRADER=0
+  # autonomous PAPER trading loop, launched as a MANAGED bot so it registers in
+  # data/bots.json and shows up (and is controllable) in the terminal's Bots
+  # panel + /api/bots -- instead of an invisible raw process. autostart creates a
+  # 'main' bot on first boot and resumes enabled bots on redeploy (idempotent:
+  # start_bot no-ops if the PID is still alive). Self-halts on the daily
+  # drawdown breaker. Disable trading with RUN_TRADER=0.
   if [ "${RUN_TRADER:-1}" = "1" ]; then
-    python -m trader.run >> data/trader.log 2>&1 &
+    python -m dashboard.autostart >> data/trader.log 2>&1 &
   fi
 fi
 
