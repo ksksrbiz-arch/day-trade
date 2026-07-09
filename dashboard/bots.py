@@ -107,8 +107,28 @@ def _real_pid(bot) -> int | None:
     return None
 
 
+def _is_our_trader(pid) -> bool:
+    """Guard against PID REUSE: a stale stored pid (from a prior container) can
+    collide with an unrelated live process (uvicorn, a daemon) whose pid the OS
+    reassigned. Verify the pid is actually a `trader.run` process before trusting
+    it -- otherwise autostart no-ops on a phantom and never launches the bot."""
+    if not pid:
+        return False
+    if os.name != "nt":
+        try:
+            with open(f"/proc/{int(pid)}/cmdline", "rb") as f:
+                cl = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+            return "trader.run" in cl
+        except Exception:  # noqa: BLE001
+            return False
+    return True                                  # Windows: trust the psutil/tasklist path
+
+
 def _bot_alive(bot) -> bool:
-    return _alive(_real_pid(bot)) or _alive(bot.get("pid"))
+    for pid in (_real_pid(bot), bot.get("pid")):
+        if pid and _alive(pid) and _is_our_trader(pid):
+            return True
+    return False
 
 
 def list_bots() -> list[dict]:
@@ -201,7 +221,7 @@ def start_bot(bot_id: str) -> dict | None:
     bot = reg.get(bot_id)
     if not bot:
         return None
-    if _alive(bot.get("pid")):
+    if _bot_alive(bot):                          # robust: real trader.run, not a reused pid
         return bot
     d = BOTS_DIR / bot_id
     d.mkdir(parents=True, exist_ok=True)
