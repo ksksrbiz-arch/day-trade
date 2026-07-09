@@ -122,7 +122,11 @@ def _kill(match: str):
 
 
 def _launch_brain():
-    """Best-effort launch of the Next.js brain dev server (port 3000)."""
+    """Best-effort launch of the Next.js brain DEV server (port 3000). Local-dev
+    convenience only -- on the cloud the brain is served by Vercel, and the
+    Windows-only DETACHED creationflags below would raise on Linux."""
+    if os.name != "nt":
+        return
     brain = os.path.join(_PROJ, "brain")
     if not os.path.isdir(brain):
         return
@@ -166,7 +170,8 @@ def selftest() -> dict:
             checks[m] = f"FAIL {str(e)[:60]}"
     for d in ("data", os.path.join("data", "mesh"), os.path.join("data", "agents")):
         checks["dir:" + d] = "ok" if os.path.isdir(os.path.join(_PROJ, d)) else "missing"
-    checks["dashboard"] = "ok" if _http_ok("http://127.0.0.1:8000/api/health/full") else "down"
+    _dport = os.getenv("PORT", "8000")       # Render binds uvicorn to $PORT, not 8000
+    checks["dashboard"] = "ok" if _http_ok(f"http://127.0.0.1:{_dport}/api/health/full") else "down"
     fails = [k for k, v in checks.items() if v != "ok"]
     res = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "ok": not fails, "fails": fails, "checks": checks}

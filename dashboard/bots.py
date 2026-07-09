@@ -231,7 +231,10 @@ def stop_bot(bot_id: str) -> dict | None:
     rp = _real_pid(bot)
     if rp:
         try:
-            subprocess.run(["taskkill", "/PID", str(rp), "/T", "/F"], capture_output=True, timeout=10)
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(rp), "/T", "/F"], capture_output=True, timeout=10)
+            else:
+                os.kill(int(rp), 15)          # POSIX SIGTERM (taskkill is Windows-only)
         except Exception:
             pass
     try:
