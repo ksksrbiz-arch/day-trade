@@ -83,10 +83,29 @@ def _price_fn(sym, asset, day, horizon):
     return cl[idx], cl[idx + horizon]
 
 
+_DS_CACHE: dict = {"key": None, "at": 0.0, "X": None, "y": None}
+_DS_TTL = 600.0                 # re-resolve at most every 10 min (bars mature slowly)
+
+
 def build_dataset():
-    """Resolve logged decisions into (X method-vectors, y up/down)."""
+    """Resolve logged decisions into (X method-vectors, y up/down).
+
+    Memoized on the decision-log signature (mtime+size) with a 10-min TTL: the
+    cortex, confluence-backprop, calibrator, attribution and the autonomy sweep
+    (3x/cycle via _cortex_samples) all call this, and resolving ~1.5k rows every
+    time is wasted work when the log hasn't changed. Resolved labels are stable
+    (only decisions older than the horizon resolve), so caching is safe."""
+    import time as _t
     if not os.path.exists(DECISIONS):
         return np.zeros((0, len(METHODS))), np.zeros(0)
+    try:
+        st = os.stat(DECISIONS)
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = None
+    if (key is not None and _DS_CACHE["key"] == key
+            and _DS_CACHE["X"] is not None and (_t.time() - _DS_CACHE["at"]) < _DS_TTL):
+        return _DS_CACHE["X"], _DS_CACHE["y"]
     X, y = [], []
     for ln in open(DECISIONS, encoding="utf-8"):
         try:
@@ -101,7 +120,9 @@ def build_dataset():
             continue
         X.append([r["scores"].get(m, 0.0) for m in METHODS])
         y.append(1 if (p1 / p0 - 1.0) > 0 else 0)
-    return np.asarray(X, dtype=float), np.asarray(y, dtype=float)
+    Xa = np.asarray(X, dtype=float); ya = np.asarray(y, dtype=float)
+    _DS_CACHE.update(key=key, at=_t.time(), X=Xa, y=ya)
+    return Xa, ya
 
 
 def _sigmoid(z):

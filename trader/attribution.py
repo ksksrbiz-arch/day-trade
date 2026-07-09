@@ -47,8 +47,23 @@ def _weights() -> dict:
     return {m: base[m] / s for m in backprop.METHODS}
 
 
+_REP_CACHE: dict = {"key": None, "at": 0.0, "val": None}
+_REP_TTL = 600.0
+
+
 def report(min_decisions: int = MIN_DECISIONS) -> dict:
     from . import backprop
+    import time as _t
+    # memoized on the decision-log signature (same rationale as build_dataset):
+    # this re-resolves ~1.5k rows and is called by /api/voices + prune/promote.
+    try:
+        st = os.stat(backprop.DECISIONS)
+        _key = (st.st_mtime_ns, st.st_size, min_decisions)
+    except OSError:
+        _key = None
+    if (_key is not None and _REP_CACHE["key"] == _key
+            and _REP_CACHE["val"] is not None and (_t.time() - _REP_CACHE["at"]) < _REP_TTL):
+        return _REP_CACHE["val"]
     methods = backprop.METHODS
     blank = {"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
              "resolved": 0, "total_dir_return_pct": 0.0, "voices": [],
@@ -113,6 +128,7 @@ def report(min_decisions: int = MIN_DECISIONS) -> dict:
                 per[lead_m]["lead_hits"] += 1
 
     if resolved == 0:
+        _REP_CACHE.update(key=_key, at=_t.time(), val=blank)
         return blank
 
     voices = []
@@ -146,10 +162,12 @@ def report(min_decisions: int = MIN_DECISIONS) -> dict:
                    f"decisions yet — attribution still maturing. Total directional "
                    f"return per decision: {total_dir / resolved * 100:+.3f}%.")
 
-    return {"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    _out = {"generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "resolved": resolved, "total_dir_return_pct": round(total_dir / resolved * 100, 3),
             "weights_source": "backprop-learned" if le_trained else "static base",
             "voices": voices, "summary": summary}
+    _REP_CACHE.update(key=_key, at=_t.time(), val=_out)
+    return _out
 
 
 def format_report(rep: dict | None = None) -> str:
