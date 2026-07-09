@@ -77,6 +77,17 @@ def _alive(pid) -> bool:
         return psutil.pid_exists(int(pid))
     except Exception:
         pass
+    # POSIX (Linux/Render): signal 0 probes existence without touching the process
+    if os.name != "nt":
+        try:
+            os.kill(int(pid), 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True                     # exists, just not ours to signal
+        except Exception:
+            return False
     # fallback: tasklist on Windows
     try:
         out = subprocess.run(["tasklist", "/FI", f"PID eq {int(pid)}"],
