@@ -434,7 +434,8 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
         synth = Label(tickers=[sym],
                       sentiment=e.get("sentiment", 0.0) or (0.5 if e["thesis"] == "buy" else -0.5),
                       confidence=e.get("confidence", 0.6) or 0.6, event_type="daytrade")
-        intent = Intent(symbol=sym, side=e["thesis"], notional=cfg.strategy.notional_per_trade,
+        _side = "sell" if e["thesis"] == "short" else e["thesis"]   # broker-side (legacy watches)
+        intent = Intent(symbol=sym, side=_side, notional=cfg.strategy.notional_per_trade,
                         take_profit_pct=cfg.strategy.take_profit_pct, stop_loss_pct=cfg.strategy.stop_loss_pct,
                         reason="confirmed breakout: " + e.get("catalyst", "")[:50])
         features = md.features(sym) if md is not None else None
