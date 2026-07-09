@@ -14,7 +14,7 @@ import { FIRE_KINDS } from "../contract";
 
 const BASE =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_TELEMETRY_BASE) ||
-  "http://127.0.0.1:8000";
+  "https://day-trade-backend.onrender.com";  // prod fallback (was localhost:8000)
 
 export class LiveEventSource implements IEventSource {
   private base: string;

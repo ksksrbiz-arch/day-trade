@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const BASE =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_TELEMETRY_BASE) ||
-  "http://127.0.0.1:8000";
+  "https://day-trade-backend.onrender.com";  // prod fallback (was localhost:8000)
 
 type Layer = { attn: number[][]; entropy: number; latent_norms: number[] };
 type Trace = {
