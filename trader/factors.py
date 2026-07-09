@@ -107,6 +107,38 @@ def ranking(universe=None) -> list[dict]:
     return out
 
 
+def arm_top(n: int = 3, wl=None, allow_short: bool = True, expiry_min: int = 1440,
+            min_abs: float = 0.30) -> dict:
+    """ARM the strongest cross-sectional names into the watch->wait->strike list:
+    the top of the ranking as longs, the bottom as shorts (if allowed). The bot
+    only strikes when price CONFIRMS the factor thesis. `wl` shares a trade loop's
+    WatchList so arming is in-process."""
+    from .ml.dataset import _alpaca_series
+    rank = ranking()
+    if not rank:
+        return {"ok": False, "armed": 0, "reason": "no ranking"}
+    if wl is None:
+        from .watchlist import WatchList
+        wl = WatchList()
+    picks = [(c, "buy") for c in rank[:n] if c["score"] >= min_abs]
+    if allow_short:
+        picks += [(c, "sell") for c in rank[-n:] if c["score"] <= -min_abs]
+    armed = []
+    for c, side in picks:
+        try:
+            ser = _alpaca_series(c["symbol"])
+            if not ser:
+                continue
+            px = float(ser[-1][1])
+            wl.arm(c["symbol"], side, px, f"factor {side} z={c['score']}",
+                   buffer=0.005, expiry_min=expiry_min,
+                   confidence=min(0.95, abs(c["score"])), source="factor")
+            armed.append({"symbol": c["symbol"], "side": side, "score": c["score"]})
+        except Exception:  # noqa: BLE001
+            continue
+    return {"ok": True, "armed": armed}
+
+
 if __name__ == "__main__":
     import json
     print(json.dumps(ranking()[:8], indent=2))

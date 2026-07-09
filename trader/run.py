@@ -386,6 +386,7 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
     if not _breaker_ok(cfg, broker):
         return 0
     regime = market_brain.cached_regime() or "neutral"
+    _watch.reload()          # see watches armed by other processes (autonomy scanner)
     # 1) discovery: news arms watches (no trade yet)
     items = news.fetch(cfg.feeds, cfg.seen_path)
     armed = 0
@@ -407,6 +408,14 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
                                  "symbol": intent.symbol, "side": intent.side, "sentiment": label.sentiment,
                                  "confidence": label.confidence, "event": label.event_type,
                                  "regime": regime, "headline": item.get("title", "")[:120]})
+    # also arm SYSTEMATIC candidates each cycle: momentum scanner + cross-sectional
+    # factor ranking. They become price-confirmed strikes through the same gate.
+    try:
+        from . import scanner as _scan, factors as _fac
+        _scan.arm_top(n=5, min_conf=0.66, wl=_watch)
+        _fac.arm_top(n=3, wl=_watch, allow_short=cfg.strategy.allow_short)
+    except Exception as _ae:  # noqa: BLE001
+        print(f"[daytrader] systematic arm skipped: {_ae}")
     print(f"[{datetime.now(timezone.utc):%H:%M:%S}] daytrader: {len(items)} news, {armed} armed, {len(_watch.active())} watching")
     # 2) monitor: strike on confirmation
     open_syms = broker.open_symbols()

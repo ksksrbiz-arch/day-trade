@@ -39,7 +39,7 @@ DEFAULT_PARAMS = {
     "cooldown_min": 30.0,
     "min_rr": 2.0,
     "daily_max_dd": 3.0,
-    "mode": "news",
+    "mode": "daytrader",   # watch->wait->strike; acts on scanner+factor armed setups
     "scalper_universe": "",
     "scalper_window": 20,
     "scalper_k": 2.0,

@@ -105,19 +105,22 @@ def scan(universe=None, fade: bool = False, min_conf: float = 0.62) -> list[dict
 
 
 def arm_top(n: int = 6, fade: bool = False, min_conf: float = 0.66,
-            expiry_min: int = 1440) -> dict:
+            expiry_min: int = 1440, wl=None) -> dict:
     """Scan and ARM the strongest catalysts into the watch->wait->strike list, so
-    the bot only strikes when price confirms the momentum thesis."""
+    the bot only strikes when price confirms the momentum thesis. `wl` lets a
+    trade loop pass its own WatchList so arming is in-process."""
     cats = scan(fade=fade, min_conf=min_conf)[:n]
     armed = []
     try:
-        from .watchlist import WatchList
-        wl = WatchList()
+        if wl is None:
+            from .watchlist import WatchList
+            wl = WatchList()
         for c in cats:
-            entry = wl.arm(c["symbol"], c["thesis"], c["price"], c["why"],
+            side = "sell" if c["thesis"] == "short" else "buy"   # broker-side thesis
+            entry = wl.arm(c["symbol"], side, c["price"], c["why"],
                            buffer=0.005, expiry_min=expiry_min,
                            confidence=c["confidence"], source="momentum_scanner")
-            armed.append({"symbol": c["symbol"], "thesis": c["thesis"],
+            armed.append({"symbol": c["symbol"], "thesis": side,
                           "confidence": c["confidence"], "trigger": entry.get("trigger")})
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:160], "scanned": len(cats)}

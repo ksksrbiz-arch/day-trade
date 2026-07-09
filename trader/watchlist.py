@@ -79,6 +79,12 @@ class WatchList:
         self._save()
         return entry
 
+    def reload(self):
+        """Re-read from disk so a trade loop sees watches armed by OTHER processes
+        (e.g. the autonomy scanner). Cheap; call once per cycle."""
+        self.items = self._load()
+        return self
+
     def active(self) -> list[dict]:
         return list(self.items.values())
 

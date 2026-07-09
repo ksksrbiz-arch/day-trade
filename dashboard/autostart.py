@@ -16,6 +16,16 @@ def main():
         b.start_bot(bot["id"])
         print(f"created+started default bot {bot['id']}")
         return
+    # one-time migration: the first 'main' bot was created on the news default,
+    # but the momentum+factor pipeline only trades in daytrader (watch->strike).
+    migrated = False
+    for bot in reg.values():
+        if bot.get("name") == "main" and (bot.get("params") or {}).get("mode") == "news":
+            bot["params"]["mode"] = "daytrader"
+            migrated = True
+    if migrated:
+        b._save(reg)
+        print("migrated 'main' bot -> daytrader mode")
     started = []
     for bid, bot in reg.items():
         if bot.get("enabled"):
