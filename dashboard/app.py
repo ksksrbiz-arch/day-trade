@@ -1210,4 +1210,16 @@ def api_episodes():
         return {"total": 0, "error": str(e)[:160]}
 
 
+@app.get("/api/psyche/reflect")
+def api_psyche_reflect():
+    """Trigger one introspection cycle now: the system reflects on its state +
+    experience and forms/updates structured beliefs (which feed strategy
+    weighting). Idempotent-ish; returns the reflection + what it formed."""
+    try:
+        from trader import psyche
+        return psyche.reflect()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
