@@ -1187,4 +1187,27 @@ def api_psyche():
         return {"error": str(e)[:160]}
 
 
+@app.get("/api/beliefs")
+def api_beliefs():
+    """The system's self-built structured knowledge: beliefs (with decayed
+    confidence + utility), the per-voice multipliers they apply to strategy
+    weighting, and any unresolved conflicts."""
+    try:
+        from trader import beliefs
+        return beliefs.stats()
+    except Exception as e:  # noqa: BLE001
+        return {"n": 0, "error": str(e)[:160]}
+
+
+@app.get("/api/episodes")
+def api_episodes():
+    """Episodic decision memory: what the system did, in what state, and how it
+    turned out -- plus its behaviour broken out by mood/curiosity state."""
+    try:
+        from trader import episodes
+        return episodes.stats()
+    except Exception as e:  # noqa: BLE001
+        return {"total": 0, "error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

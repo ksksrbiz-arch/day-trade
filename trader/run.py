@@ -318,6 +318,16 @@ def run_news(cfg, labeler, broker, md, groq, cs, optbroker, omni=None) -> int:
         except Exception:  # noqa: BLE001
             _pup = None
         oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
+        if oid:                                  # EPISODIC MEMORY: record the decision + its state
+            try:
+                from . import episodes as _ep, psyche as _psy, beliefs as _bel
+                _ps = _psy.state()
+                _ep.log(exec_sym, intent.side, broker.last_price(intent.symbol), regime=regime,
+                        mood=_ps.get("mood", ""), valence=_ps.get("valence", 0.0),
+                        curiosity=_ps.get("curiosity", 0.0),
+                        active_beliefs=[b["id"] for b in _bel.active(regime)][:6])
+            except Exception:  # noqa: BLE001
+                pass
         open_syms.add(intent.symbol)
         _last_entry[intent.symbol] = time.time()
         acted += 1
@@ -464,6 +474,16 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
         except Exception:  # noqa: BLE001
             _pup = None
         oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
+        if oid:                                  # EPISODIC MEMORY: record the decision + its state
+            try:
+                from . import episodes as _ep, psyche as _psy, beliefs as _bel
+                _ps = _psy.state()
+                _ep.log(exec_sym, intent.side, broker.last_price(intent.symbol), regime=regime,
+                        mood=_ps.get("mood", ""), valence=_ps.get("valence", 0.0),
+                        curiosity=_ps.get("curiosity", 0.0),
+                        active_beliefs=[b["id"] for b in _bel.active(regime)][:6])
+            except Exception:  # noqa: BLE001
+                pass
         open_syms.add(sym)
         _last_entry[sym] = time.time()
         acted += 1

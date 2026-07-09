@@ -89,9 +89,18 @@ def confluence(ta=None, quant=None, fundamental=None, council=None, ml=None,
 
     rw = _REGIME_W.get(regime or "neutral", _REGIME_W["neutral"])
     _lb = _learned_base()  # backprop-learned emphasis, if available
-    eff = {k: ((_ov["pinned"][k] if k in _ov["pinned"]
-                else (_lb.get(k) if _lb and k in _lb else _BASE_W.get(k, 0.12))) * rw.get(k, 1.0))
-           for k in scores}
+    try:                   # SELF-BUILT BELIEFS feed back here: regime-matched beliefs
+        from . import beliefs as _beliefs   # down/up-weight voices they contradict/endorse
+        _bm = _beliefs.voice_multipliers(regime)
+    except Exception:  # noqa: BLE001
+        _bm = {}
+    eff = {}
+    for k in scores:
+        if k in _ov["pinned"]:              # human pin overrides beliefs
+            eff[k] = _ov["pinned"][k] * rw.get(k, 1.0)
+        else:
+            base = _lb.get(k) if _lb and k in _lb else _BASE_W.get(k, 0.12)
+            eff[k] = base * rw.get(k, 1.0) * _bm.get(k, 1.0)
     w = _norm(eff, set(scores))
     composite = sum(w[k] * scores[k] for k in scores)
     composite = max(-1.0, min(1.0, composite))
