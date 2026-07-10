@@ -51,7 +51,7 @@ def summary(bot_id: str | None = None) -> dict:
         a = r.get("action", "")
         actions[a] = actions.get(a, 0) + 1
         if a in ("skip_unconfirmed", "skip_confluence", "skip"):
-            rsn = (r.get("reason", "") or "?")[:60]
+            rsn = (r.get("gate_reason", "") or r.get("reason", "") or "?")[:60]
             reasons[rsn] = reasons.get(rsn, 0) + 1
         if a in ("order", "order_failed"):
             ev = r.get("event", "") or "?"
