@@ -246,6 +246,18 @@ def _ev_risk_guard():
     cur = float(_cur_param("MIN_CONFIDENCE", 0.55))
     if cur >= 0.65:
         return {"eligible": False, "reason": f"MIN_CONFIDENCE already defensive ({cur})"}
+    # Yield to the starvation-relief loop: don't ratchet the floor back up while
+    # the desk is deciding a lot but essentially never trading -- un-starving the
+    # learning loop takes priority over extra defensiveness on a paper desk that
+    # isn't executing anyway.
+    try:
+        from dashboard import dash_metrics
+        sm = dash_metrics.summary()
+        if int(sm.get("total_decisions", 0)) >= 60 and \
+           int(sm.get("orders", 0)) / max(1, int(sm.get("total_decisions", 1))) < 0.03:
+            return {"eligible": False, "reason": "desk starved -> not raising floor (relax has priority)"}
+    except Exception:  # noqa: BLE001
+        pass
     return {"eligible": True,
             "reason": f"stressed regime ({regime}) -> raise MIN_CONFIDENCE {cur}->0.65",
             "proposal": {"kind": "param", "name": "MIN_CONFIDENCE", "value": 0.65}}
