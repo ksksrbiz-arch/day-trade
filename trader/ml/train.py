@@ -37,7 +37,7 @@ def _edge(y, p, top_frac=0.3):
     return float(y[idx].mean() - y.mean())
 
 
-def train_once(horizon=10, lookback=130, val_frac=0.25, l2=1.0, epochs=500,
+def train_once(horizon=20, lookback=130, val_frac=0.25, l2=1.0, epochs=500,
                verbose=True, force_promote=False) -> dict:
     X, y, dates, syms, names = build_dataset(horizon=horizon, lookback=lookback)
     # learn from the system's OWN matured trades (closed feedback loop)
