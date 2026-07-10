@@ -84,7 +84,7 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
           m.get(e.source)!.act = 1; m.get(e.target)!.act = Math.max(m.get(e.target)!.act, 0.85);
           const col = KIND_COLOR[e.kind] || [150, 200, 255];
           if (parts.current.length < 600)
-            parts.current.push({ s: e.source, t: e.target, born: performance.now(), life: 1300, col });
+            parts.current.push({ s: e.source, t: e.target, born: performance.now(), life: 2000, col });
         } catch { /* ignore */ }
       };
     } catch { /* no EventSource */ }
@@ -140,16 +140,16 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
         const [ax, ay] = nodeXY(a), [bx, by] = nodeXY(b);
         const cx = (ax + bx) / 2, cy = (ay + by) / 2 - (bx - ax) * 0.06;
         const speed = 0.06 + ((ei * 37) % 11) / 120;
-        for (let q = 0; q < 2; q++) {
-          const tt = ((ts / 1000) * speed + ei * 0.137 + q * 0.5) % 1;
+        {
+          const tt = ((ts / 1000) * speed + ei * 0.137) % 1;
           const it = 1 - tt;
           const x = it * it * ax + 2 * it * tt * cx + tt * tt * bx;
           const y = it * it * ay + 2 * it * tt * cy + tt * tt * by;
-          const al = Math.sin(Math.PI * tt) * 0.6;
-          const gr = ctx.createRadialGradient(x, y, 0, x, y, 6);
-          gr.addColorStop(0, `rgba(90,200,225,${al})`);
-          gr.addColorStop(1, "rgba(90,200,225,0)");
-          ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+          const al = Math.sin(Math.PI * tt) * 0.14;   // faint "wiring hum" only
+          const gr = ctx.createRadialGradient(x, y, 0, x, y, 3.5);
+          gr.addColorStop(0, `rgba(78,110,140,${al})`);
+          gr.addColorStop(1, "rgba(78,110,140,0)");
+          ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
         }
       }
 
@@ -165,11 +165,15 @@ export default function MeshNet({ kinds }: { kinds?: Set<string> }) {
         const x = it * it * ax + 2 * it * tt * cx + tt * tt * bx;
         const y = it * it * ay + 2 * it * tt * cy + tt * tt * by;
         const al = Math.sin(Math.PI * tt);
-        const sz = 2.6 * (0.5 + 0.5 * al);
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, sz * 3.2);
-        gr.addColorStop(0, `rgba(${p.col[0]},${p.col[1]},${p.col[2]},${0.95 * al})`);
+        const sz = 4.4 * (0.55 + 0.45 * al);
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, sz * 3.6);
+        gr.addColorStop(0, `rgba(${p.col[0]},${p.col[1]},${p.col[2]},${0.98 * al})`);
+        gr.addColorStop(0.5, `rgba(${p.col[0]},${p.col[1]},${p.col[2]},${0.45 * al})`);
         gr.addColorStop(1, `rgba(${p.col[0]},${p.col[1]},${p.col[2]},0)`);
-        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, sz * 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, sz * 3.6, 0, Math.PI * 2); ctx.fill();
+        // white-hot core so the colour reads instantly against the dark mesh
+        ctx.fillStyle = `rgba(255,255,255,${0.75 * al})`;
+        ctx.beginPath(); ctx.arc(x, y, sz * 0.62, 0, Math.PI * 2); ctx.fill();
         return true;
       });
       ctx.globalCompositeOperation = "source-over";
