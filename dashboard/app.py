@@ -1266,7 +1266,10 @@ def api_cognition():
         from trader import cognition
         return {"brief": cognition.last("brief"), "catalysts": cognition.last("catalysts"),
                 "postmortem": cognition.last("postmortem"), "risk": cognition.last("risk"),
-                "adjudicate": cognition.last("adjudicate")}
+                "adjudicate": cognition.last("adjudicate"),
+                "macro": cognition.last("macro"), "second_opinion": cognition.last("second_opinion"),
+                "theory": cognition.last("theory"), "watchlist_review": cognition.last("watchlist_review"),
+                "strategy_review": cognition.last("strategy_review"), "anomaly": cognition.last("anomaly")}
     except Exception as e:  # noqa: BLE001
         return {"error": str(e)[:160]}
 
@@ -1277,9 +1280,13 @@ def api_cognition_run(job: str = "brief"):
     job in: brief | catalysts | postmortem | risk | adjudicate."""
     try:
         from trader import cognition
+        from trader import cognition2
         fn = {"brief": cognition.brief, "catalysts": cognition.news_catalysts,
               "postmortem": cognition.postmortem, "risk": cognition.risk_scan,
-              "adjudicate": cognition.adjudicate}.get(job)
+              "adjudicate": cognition.adjudicate,
+              "macro": cognition2.macro_analysis, "second_opinion": cognition2.second_opinion,
+              "theory": cognition2.theory_synthesis, "watchlist_review": cognition2.watchlist_review,
+              "strategy_review": cognition2.strategy_review, "anomaly": cognition2.anomaly_explain}.get(job)
         if not fn:
             return {"ok": False, "error": f"unknown job {job}"}
         return fn()

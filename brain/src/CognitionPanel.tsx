@@ -22,6 +22,9 @@ type Cog = {
   catalysts?: { catalysts?: { ticker?: string; direction?: string; event?: string; confidence?: number }[]; armed?: number };
   risk?: { risk_level?: string; warnings?: string[] };
   postmortem?: { lessons?: string[]; win_rate?: number; reviewed?: number };
+  macro?: { thesis?: string; direction?: number };
+  theory?: { theory?: string };
+  second_opinion?: { symbol?: string; opinion?: string };
 };
 
 export default function CognitionPanel() {
@@ -68,6 +71,24 @@ export default function CognitionPanel() {
         {d?.brief?.ts && <div style={{ color: DIM, fontSize: 9, marginTop: 3 }}>{d.brief.ts}</div>}
       </div>
 
+      {d?.macro?.thesis && (
+        <>
+          <div style={sec}>MACRO READ</div>
+          <div style={{ fontSize: 11, color: "#d8e6f0", lineHeight: 1.4, marginBottom: 8, paddingLeft: 9, borderLeft: `2px solid ${AMBER}55` }}>
+            {d.macro.thesis}
+          </div>
+        </>
+      )}
+
+      {d?.second_opinion?.opinion && (
+        <>
+          <div style={sec}>SECOND OPINION{d.second_opinion.symbol ? ` · ${d.second_opinion.symbol}` : ""}</div>
+          <div style={{ fontSize: 10.5, color: "#cfe0ea", lineHeight: 1.4, marginBottom: 8, paddingLeft: 9, borderLeft: `2px solid ${VIOLET}55` }}>
+            {d.second_opinion.opinion}
+          </div>
+        </>
+      )}
+
       {cats.length > 0 && (
         <>
           <div style={sec}>NEWS CATALYSTS {typeof d?.catalysts?.armed === "number" ? `· ${d.catalysts.armed} armed` : ""}</div>
@@ -104,6 +125,15 @@ export default function CognitionPanel() {
             {pm.lessons.slice(0, 3).map((l, i) => (
               <div key={i} style={{ fontSize: 10, color: "#c8d6e2", lineHeight: 1.3, paddingLeft: 8, borderLeft: `2px solid ${VIOLET}55` }}>{l.slice(0, 100)}</div>
             ))}
+          </div>
+        </>
+      )}
+
+      {d?.theory?.theory && (
+        <>
+          <div style={{ ...sec, marginTop: 6 }}>OPERATING THEORY</div>
+          <div style={{ fontSize: 10.5, color: "#e4eef5", lineHeight: 1.45, fontStyle: "italic", paddingLeft: 9, borderLeft: `2px solid ${GREEN}55` }}>
+            {d.theory.theory}
           </div>
         </>
       )}

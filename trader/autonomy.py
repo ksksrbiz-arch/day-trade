@@ -770,7 +770,104 @@ def _ap_llm_adjudicate(p):
     return _cog_apply("llm_adjudicate", cognition.adjudicate)
 
 
+# ---- free-model cognition, suite 2 (deeper reasoning jobs) ---- #
+def _ev_llm_macro():
+    ok, blocked = _cog_gate("llm_macro", _gate_hours(3, 2))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "cross-asset macro thesis",
+            "proposal": {"kind": "llm_macro"}}
+
+
+def _ap_llm_macro(p):
+    from . import cognition2
+    return _cog_apply("llm_macro", cognition2.macro_analysis)
+
+
+def _ev_llm_second_opinion():
+    ok, blocked = _cog_gate("llm_second_opinion", _gate_hours(2, 1.5))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "independent second opinion on the most split name",
+            "proposal": {"kind": "llm_second_opinion"}}
+
+
+def _ap_llm_second_opinion(p):
+    from . import cognition2
+    return _cog_apply("llm_second_opinion", cognition2.second_opinion)
+
+
+def _ev_llm_theory():
+    ok, blocked = _cog_gate("llm_theory", _gate_hours(6, 8))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "synthesize current operating theory (self-model)",
+            "proposal": {"kind": "llm_theory"}}
+
+
+def _ap_llm_theory(p):
+    from . import cognition2
+    return _cog_apply("llm_theory", cognition2.theory_synthesis)
+
+
+def _ev_llm_watchlist_review():
+    ok, blocked = _cog_gate("llm_watchlist_review", _gate_hours(3, 2))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "review armed watch->strike theses for staleness",
+            "proposal": {"kind": "llm_watchlist_review"}}
+
+
+def _ap_llm_watchlist_review(p):
+    from . import cognition2
+    return _cog_apply("llm_watchlist_review", cognition2.watchlist_review)
+
+
+def _ev_llm_strategy_review():
+    ok, blocked = _cog_gate("llm_strategy_review", _gate_hours(8, 10))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "review learned weights + attribution -> tweaks",
+            "proposal": {"kind": "llm_strategy_review"}}
+
+
+def _ap_llm_strategy_review(p):
+    from . import cognition2
+    return _cog_apply("llm_strategy_review", cognition2.strategy_review)
+
+
+def _ev_llm_anomaly():
+    ok, blocked = _cog_gate("llm_anomaly", _gate_hours(2, 1))
+    if not ok:
+        return blocked
+    try:
+        from . import mesh_anomaly
+        if not mesh_anomaly.summary().get("anomalies"):
+            return {"eligible": False, "reason": "no anomalies to explain"}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"eligible": True, "reason": "explain live mesh anomalies",
+            "proposal": {"kind": "llm_anomaly"}}
+
+
+def _ap_llm_anomaly(p):
+    from . import cognition2
+    return _cog_apply("llm_anomaly", cognition2.anomaly_explain)
+
+
 ACTIONS = {
+    "llm_macro":            {"evaluate": _ev_llm_macro, "apply": _ap_llm_macro,
+                             "auto_safe": True, "desc": "free-model cross-asset macro thesis"},
+    "llm_second_opinion":   {"evaluate": _ev_llm_second_opinion, "apply": _ap_llm_second_opinion,
+                             "auto_safe": True, "desc": "free-model independent second opinion on the most split council call"},
+    "llm_theory":           {"evaluate": _ev_llm_theory, "apply": _ap_llm_theory,
+                             "auto_safe": True, "desc": "free-model synthesis of the system's current operating theory"},
+    "llm_watchlist_review": {"evaluate": _ev_llm_watchlist_review, "apply": _ap_llm_watchlist_review,
+                             "auto_safe": True, "desc": "free-model staleness review of the armed watch->strike list"},
+    "llm_strategy_review":  {"evaluate": _ev_llm_strategy_review, "apply": _ap_llm_strategy_review,
+                             "auto_safe": True, "desc": "free-model review of learned weights + voice attribution"},
+    "llm_anomaly":          {"evaluate": _ev_llm_anomaly, "apply": _ap_llm_anomaly,
+                             "auto_safe": True, "desc": "free-model explanation of live mesh anomalies"},
     "llm_brief":            {"evaluate": _ev_llm_brief, "apply": _ap_llm_brief,
                              "auto_safe": True, "desc": "free-model market brief (regime+forecast+news+dream -> language)"},
     "llm_catalysts":        {"evaluate": _ev_llm_catalysts, "apply": _ap_llm_catalysts,
