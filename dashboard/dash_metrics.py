@@ -46,9 +46,13 @@ def summary(bot_id: str | None = None) -> dict:
     events: dict[str, int] = {}
     sides = {"buy": 0, "sell": 0}
     confs, sents = [], []
+    reasons: dict[str, int] = {}
     for r in rows:
         a = r.get("action", "")
         actions[a] = actions.get(a, 0) + 1
+        if a in ("skip_unconfirmed", "skip_confluence", "skip"):
+            rsn = (r.get("reason", "") or "?")[:60]
+            reasons[rsn] = reasons.get(rsn, 0) + 1
         if a in ("order", "order_failed"):
             ev = r.get("event", "") or "?"
             events[ev] = events.get(ev, 0) + 1
@@ -66,6 +70,7 @@ def summary(bot_id: str | None = None) -> dict:
         "skips_unconfirmed": actions.get("skip_unconfirmed", 0),
         "order_failed": actions.get("order_failed", 0),
         "by_action": actions,
+        "by_reason": dict(sorted(reasons.items(), key=lambda kv: kv[1], reverse=True)[:12]),
         "by_event": events,
         "by_side": sides,
         "avg_confidence": round(sum(confs) / len(confs), 3) if confs else 0,
