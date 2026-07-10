@@ -168,6 +168,34 @@ def conflicts() -> list:
     return out
 
 
+def _tok_sig(claim: str) -> set:
+    words = re.sub(r"[^a-z0-9 ]", " ", (claim or "").lower()).split()
+    stop = {"the","a","an","to","of","in","on","for","and","or","is","->","more","less","up","down"}
+    return {w for w in words if len(w) > 2 and w not in stop}
+
+
+def _merge_near_dupes(rows: list, jac: float = 0.6) -> list:
+    """Fold near-duplicate beliefs (same target+direction, high token overlap)
+    into the strongest instance -- keeps the store from filling with reworded
+    restatements of the same claim."""
+    kept: list = []
+    sigs: list = []
+    for b in sorted(rows, key=lambda r: (r.get("evidence_count", 1), r.get("confidence", 0)), reverse=True):
+        sig = _tok_sig(b.get("claim", ""))
+        dup = False
+        for i, (kb, ks) in enumerate(zip(kept, sigs)):
+            if kb.get("target") == b.get("target") and kb.get("direction") == b.get("direction") and ks and sig:
+                j = len(sig & ks) / len(sig | ks)
+                if j >= jac:
+                    kb["evidence_count"] = int(kb.get("evidence_count", 1)) + int(b.get("evidence_count", 1))
+                    kb["confidence"] = round(max(kb.get("confidence", 0), b.get("confidence", 0)), 4)
+                    dup = True
+                    break
+        if not dup:
+            kept.append(b); sigs.append(sig)
+    return kept
+
+
 def prune(min_conf: float = 0.12, max_age_days: float = 45.0, keep: int = 160) -> dict:
     """Sleep-time forgetting: drop beliefs whose effective confidence has decayed
     below ``min_conf`` while carrying no proven utility, and any that are older
@@ -188,11 +216,14 @@ def prune(min_conf: float = 0.12, max_age_days: float = 45.0, keep: int = 160) -
                             "eff_conf": round(ec, 3)})
         else:
             kept.append(b)
+    before = len(kept)
+    kept = _merge_near_dupes(kept)
+    merged = before - len(kept)
     kept.sort(key=lambda b: b.get("last_revised", 0.0), reverse=True)
     kept = kept[:keep]
     if dropped:
         _save(kept)
-    return {"kept": len(kept), "dropped": len(dropped), "forgot": dropped[:12]}
+    return {"kept": len(kept), "dropped": len(dropped), "merged": merged, "forgot": dropped[:12]}
 
 
 def stats() -> dict:

@@ -313,13 +313,29 @@ def _ev_retrain_stale_ml():
         return {"eligible": True, "reason": "no ML model yet -> train", "proposal": {"kind": "retrain_ml"}}
     if age < 24:
         return {"eligible": False, "reason": f"ML model fresh ({age:.1f}h old)"}
+    # A failed challenge leaves the champion file (and its mtime) unchanged, so
+    # gating on the champion age alone retrains every single sweep. Gate on the
+    # last ATTEMPT instead so a stale-but-unbeatable champion is retried on a
+    # cadence, not in a tight loop.
+    last = _age_h(os.path.join(_DATA, "ml_retrain_last"))
+    cd = _gate_hours(6, 8)
+    if last is not None and last < cd:
+        return {"eligible": False, "reason": f"retrain attempted recently ({last:.1f}h < {cd}h)"}
     return {"eligible": True, "reason": f"ML model stale ({age:.0f}h) -> retrain (champion-gated)",
             "proposal": {"kind": "retrain_ml"}}
 
 
 def _ap_retrain_ml(p):
     from .ml.train import train_once
-    return train_once()
+    import time as _t
+    res = train_once()
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "ml_retrain_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return res
 
 
 def _ev_recalibrate_tnet():
@@ -855,7 +871,54 @@ def _ap_llm_anomaly(p):
     return _cog_apply("llm_anomaly", cognition2.anomaly_explain)
 
 
+def _ev_relax_when_starved():
+    """Break the selectivity ratchet. In stressed regimes several agents keep
+    proposing to RAISE MIN_CONFIDENCE ("thin edge -> be pickier"), the governor
+    auto-applies them, and nothing ever lowers it -- so the desk decides
+    constantly but never trades, and with no trades the edge stays "thin," which
+    triggers more raises. If the desk is deciding a lot but almost never trading,
+    step the confidence floor back DOWN so the learning loop isn't starved.
+    Paper-only; the policy engine, drawdown breaker and safety lock still gate
+    every order below this."""
+    try:
+        from dashboard import dash_metrics
+        sm = dash_metrics.summary()
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"no bot summary ({str(e)[:40]})"}
+    total = int(sm.get("total_decisions", 0))
+    orders = int(sm.get("orders", 0))
+    if total < 60:
+        return {"eligible": False, "reason": f"not enough decisions yet ({total})"}
+    rate = orders / max(1, total)
+    floor = 0.50
+    cur = float(_cur_param("MIN_CONFIDENCE", 0.60))
+    if rate >= 0.03 or cur <= floor:
+        return {"eligible": False, "reason": f"trading enough ({rate:.0%}) / at floor ({cur})"}
+    last = _age_h(os.path.join(_DATA, "relax_starved_last"))
+    if last is not None and last < 1.0:
+        return {"eligible": False, "reason": f"relaxed recently ({last:.1f}h < 1h)"}
+    step = 0.08 if (orders == 0 and total >= 100) else 0.04
+    target = round(max(floor, cur - step), 3)
+    return {"eligible": True,
+            "reason": f"desk starved ({orders}/{total} orders) -> MIN_CONFIDENCE {cur}->{target}",
+            "proposal": {"kind": "param", "name": "MIN_CONFIDENCE", "value": target}}
+
+
+def _ap_relax_starved(p):
+    import time as _t
+    res = _ap_param(p)
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "relax_starved_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
 ACTIONS = {
+    "relax_when_starved":   {"evaluate": _ev_relax_when_starved, "apply": _ap_relax_starved,
+                             "auto_safe": True, "desc": "lower the confidence floor when the desk decides a lot but never trades (un-starve the learning loop)"},
     "llm_macro":            {"evaluate": _ev_llm_macro, "apply": _ap_llm_macro,
                              "auto_safe": True, "desc": "free-model cross-asset macro thesis"},
     "llm_second_opinion":   {"evaluate": _ev_llm_second_opinion, "apply": _ap_llm_second_opinion,
@@ -887,9 +950,9 @@ ACTIONS = {
     "run_backtest":         {"evaluate": _ev_run_backtest, "apply": _ap_run_backtest,
                              "auto_safe": True, "desc": "run a walk-forward backtest vs SPY (Alpaca data)"},
     "prune_voice":          {"evaluate": _ev_prune_voice, "apply": _ap_prune_voice,
-                             "auto_safe": False, "desc": "mute a proven-unprofitable voice"},
+                             "auto_safe": True, "desc": "mute a proven-unprofitable voice (>=20 agreeing resolved decisions; reversible)"},
     "promote_voice":        {"evaluate": _ev_promote_voice, "apply": _ap_promote_voice,
-                             "auto_safe": False, "desc": "pin a proven-profitable voice"},
+                             "auto_safe": True, "desc": "pin a proven-profitable voice (>=20 agreeing resolved decisions; reversible)"},
     "tighten_selectivity":  {"evaluate": _ev_tighten_selectivity, "apply": _ap_param,
                              "auto_safe": True, "desc": "raise selectivity when confluence underperforms"},
     "risk_guard":           {"evaluate": _ev_risk_guard, "apply": _ap_param,

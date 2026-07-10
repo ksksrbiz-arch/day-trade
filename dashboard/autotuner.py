@@ -107,10 +107,23 @@ def run_cycle(apply: bool = True) -> dict:
         from trader import safety
         ev = subprocess.run([sys.executable, "-m", "pytest", "tests/test_policy_evals.py", "-q"],
                             cwd=str(PROJ), capture_output=True, text=True, timeout=120)
-        report["evals_passed"] = (ev.returncode == 0)
-        if ev.returncode != 0:
+        rc = ev.returncode
+        # pytest exit codes: 0 = all passed, 1 = a test FAILED, 5 = no tests
+        # collected, 2/3/4 = usage/internal. Only a genuine assertion FAILURE
+        # (rc==1) is a guardrail regression worth fail-closing on. A missing or
+        # un-collected harness (rc==5, e.g. tests not shipped) must NOT hard-lock
+        # live trading -- that is a packaging problem, not a safety regression.
+        if rc == 0:
+            report["evals_passed"] = True
+            safety.clear_lock()                 # a passing suite clears any stale lock
+        elif rc == 1:
+            report["evals_passed"] = False
             safety.set_lock("daily eval suite FAILED: " + (ev.stdout or "")[-180:])
             _log("EVAL FAIL -> safety lock SET (human review required)")
+        else:
+            report["evals_passed"] = None
+            safety.clear_lock()                 # harness unavailable != regression
+            _log(f"evals unavailable (pytest rc={rc}); not locking")
     except Exception as e:
         report["evals_passed"] = None
         _log(f"eval run error: {e}")

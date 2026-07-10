@@ -14,9 +14,10 @@ ENV PYTHONUNBUFFERED=1 \
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# App code (brain/, data/, tests/ excluded via .dockerignore)
+# App code (brain/, data/ excluded via .dockerignore; tests/ shipped for the safety eval suite)
 COPY trader/ ./trader/
 COPY dashboard/ ./dashboard/
+COPY tests/ ./tests/
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh && mkdir -p data
 

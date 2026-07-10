@@ -22,7 +22,7 @@ OVERRIDES = os.path.join(_DATA, "overrides.json")
 PARAM_BOUNDS = {
     "CONFLUENCE_MIN_SCORE": (0.10, 0.45),
     "CONFLUENCE_MIN_AGREE": (2, 4),
-    "MIN_CONFIDENCE": (0.45, 0.85),
+    "MIN_CONFIDENCE": (0.45, 0.72),
     "MIN_SENTIMENT": (0.15, 0.60),
     "COOLDOWN_MIN": (5, 120),
     "TRAIL_PCT": (0.02, 0.12),

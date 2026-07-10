@@ -5,7 +5,6 @@ node_modules
 brain
 data
 .next
-tests
 .pytest_cache
 __pycache__
 *.pyc
