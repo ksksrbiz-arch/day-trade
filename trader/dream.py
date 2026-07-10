@@ -267,8 +267,8 @@ def _narrate(phases: dict) -> str:
     dr = phases.get("dream", {})
     if dr.get("beliefs_formed"):
         top = dr.get("insights", [])
-        lead = (top[0] if top else "").split(",")[0]
-        bits.append(f"dreamed over {dr.get('scanned_windows',0)} past windows and learned: {lead}")
+        lead = (top[0].split(", ", 1)[-1] if top else "").strip()
+        bits.append(f"dreamed over {dr.get('scanned_windows',0)} past windows and learned that {lead}")
     st = phases.get("study", {})
     if st.get("filed_to_ltm"):
         bits.append(f"studied {st['filed_to_ltm']} topics on the web")
