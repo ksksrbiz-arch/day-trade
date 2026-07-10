@@ -232,6 +232,9 @@ def watchlist_review() -> dict:
         out["error"] = "model unavailable"
         return out
     reviews = data.get("reviews", []) if isinstance(data, dict) else []
+    for r in reviews:                       # normalize verdict casing
+        if isinstance(r, dict) and r.get("verdict"):
+            r["verdict"] = str(r["verdict"]).lower()
     out = {"ok": True, "reviews": reviews[:12], "active": len(active),
            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     _save("watchlist_review", out)
