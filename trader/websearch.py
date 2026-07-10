@@ -74,6 +74,35 @@ def _parse_lite(page: str) -> list:
     return out
 
 
+def _ia_search(query: str) -> list:
+    """DuckDuckGo Instant Answer JSON API (keyless, works from datacenter IPs
+    where the HTML scrape is blocked). Returns the abstract + related topics --
+    great for entities/definitions, thin for breaking-news queries."""
+    import json
+    q = urllib.parse.urlencode({"q": query, "format": "json", "no_html": 1,
+                                "skip_disambig": 1, "t": "platformbrain"})
+    try:
+        d = json.loads(_fetch(f"https://api.duckduckgo.com/?{q}"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    if d.get("AbstractText"):
+        out.append({"title": d.get("Heading", query), "url": d.get("AbstractURL", ""),
+                    "snippet": d["AbstractText"][:400]})
+    if d.get("Answer"):
+        out.append({"title": d.get("AnswerType", "answer"), "url": "", "snippet": str(d["Answer"])[:400]})
+    for t in d.get("RelatedTopics", []):
+        if isinstance(t, dict) and t.get("Text"):
+            out.append({"title": t.get("Text", "")[:120], "url": (t.get("FirstURL") or ""),
+                        "snippet": t.get("Text", "")[:400]})
+        elif isinstance(t, dict) and t.get("Topics"):
+            for st in t["Topics"][:3]:
+                if st.get("Text"):
+                    out.append({"title": st.get("Text", "")[:120], "url": (st.get("FirstURL") or ""),
+                                "snippet": st.get("Text", "")[:400]})
+    return out
+
+
 def search(query: str, k: int = 5) -> list:
     """Look up `query` on DuckDuckGo. Returns up to k {title,url,snippet}. []-safe."""
     query = (query or "").strip()
@@ -91,15 +120,25 @@ def search(query: str, k: int = 5) -> list:
 
     q = urllib.parse.urlencode({"q": query, "kl": "us-en"})
     results: list = []
+    # 1) richer full-web results via the HTML/lite scrape (best when not IP-blocked)
     for url, parser in ((f"https://html.duckduckgo.com/html/?{q}", _parse_html),
                         (f"https://lite.duckduckgo.com/lite/?{q}", _parse_lite)):
         try:
             page = _fetch(url)
-            results = parser(page)
-            if results:
+            got = parser(page)
+            if got:
+                results = got
                 break
         except Exception:  # noqa: BLE001
             continue
+    # 2) always fold in the Instant-Answer API (reliable from datacenter IPs)
+    try:
+        seen = {r["url"] for r in results}
+        for r in _ia_search(query):
+            if r.get("url") not in seen:
+                results.append(r); seen.add(r.get("url"))
+    except Exception:  # noqa: BLE001
+        pass
     if results:
         _cache[query] = (now, results)
     return results[:k]
