@@ -157,7 +157,8 @@ export default function PsychePanel() {
 }
 
 const panel: React.CSSProperties = {
-  position: "fixed", right: 18, top: 470, width: 300, padding: 15, zIndex: 50,
+  position: "fixed", right: 18, top: 430, width: 300, padding: 15, zIndex: 50,
+  maxHeight: "calc(100vh - 448px)", overflowY: "auto",
   background: "linear-gradient(158deg, rgba(9,15,26,0.94), rgba(7,12,22,0.86))",
   border: "1px solid rgba(167,139,250,0.32)", borderRadius: 12,
   backdropFilter: "blur(18px) saturate(1.2)", WebkitBackdropFilter: "blur(18px) saturate(1.2)",
@@ -165,7 +166,7 @@ const panel: React.CSSProperties = {
   boxShadow: "0 18px 60px rgba(0,0,0,0.55), 0 0 24px rgba(167,139,250,0.12), inset 0 1px 0 rgba(255,255,255,0.05)",
 };
 const btn: React.CSSProperties = {
-  position: "fixed", right: 18, top: 470, zIndex: 50, cursor: "pointer",
+  position: "fixed", right: 18, top: 430, zIndex: 50, cursor: "pointer",
   background: "linear-gradient(180deg, rgba(167,139,250,0.14), rgba(167,139,250,0.05))",
   border: "1px solid", borderRadius: 9, padding: "7px 12px",
   fontSize: 11, letterSpacing: 1, fontFamily: "ui-monospace, monospace",
