@@ -1233,4 +1233,29 @@ def api_search(q: str = "", k: int = 5):
         return {"query": q, "results": [], "error": str(e)[:160]}
 
 
+@app.get("/api/dream")
+def api_dream():
+    """What the system does while the market sleeps. Returns the latest dream
+    journal (replay/consolidate/counterfactual-dream/study/retrain), recent
+    journal lines, and the current market session so the brain can show whether
+    it is awake or dreaming right now."""
+    try:
+        from trader import dream, marketclock
+        return {"session": marketclock.session(), "open": marketclock.is_open(),
+                "last": dream.last(), "journal": dream.journal(20)}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:160], "last": {}, "journal": []}
+
+
+@app.post("/api/dream/run")
+def api_dream_run():
+    """Trigger a dream cycle now (safe: memory + training only, never trades).
+    Handy for testing; normally the autonomy governor runs it while closed."""
+    try:
+        from trader import dream
+        return dream.run(reason="manual trigger")
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

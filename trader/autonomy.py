@@ -633,7 +633,44 @@ def _ap_reflect(p):
     return res
 
 
+def _ev_dream():
+    """Sleep-phase consolidation: when the US market is CLOSED, run the dream
+    cycle -- replay + resolve episodes, consolidate/prune beliefs, counterfactual
+    replay over real history, curiosity web study, and offline retraining. Only
+    eligible while the market is closed so it never competes with live trading.
+    Auto-safe: memory + training stores only, never the broker."""
+    try:
+        from . import marketclock
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"marketclock unavailable: {str(e)[:60]}"}
+    if marketclock.is_open():
+        return {"eligible": False, "reason": "market open -- dreaming waits for close"}
+    last = _age_h(os.path.join(_DATA, "dream_last"))
+    gate = 3.0  # a few consolidation passes per overnight, bounded + idempotent
+    if last is not None and last < gate:
+        return {"eligible": False, "reason": f"dreamed recently ({last}h < {gate}h)"}
+    sess = marketclock.session()
+    return {"eligible": True, "reason": f"market {sess} -- run the dream cycle",
+            "proposal": {"kind": "dream"}}
+
+
+def _ap_dream(p):
+    from . import dream
+    import time as _t
+    res = dream.run(reason="autonomy: market closed")
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "dream_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return {"journal": res.get("journal"), "elapsed_s": res.get("elapsed_s"),
+            "session": res.get("session")}
+
+
 ACTIONS = {
+    "dream":                {"evaluate": _ev_dream, "apply": _ap_dream,
+                             "auto_safe": True, "desc": "sleep-phase consolidation while the market is closed (replay, consolidate, counterfactual dream, study, retrain)"},
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,
                              "auto_safe": True, "desc": "learn risk appetite from realized edge/drawdown"},
     "discover_strategy":    {"evaluate": _ev_discover_strategy, "apply": _ap_discover_strategy,

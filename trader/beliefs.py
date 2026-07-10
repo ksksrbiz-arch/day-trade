@@ -168,6 +168,33 @@ def conflicts() -> list:
     return out
 
 
+def prune(min_conf: float = 0.12, max_age_days: float = 45.0, keep: int = 160) -> dict:
+    """Sleep-time forgetting: drop beliefs whose effective confidence has decayed
+    below ``min_conf`` while carrying no proven utility, and any that are older
+    than ``max_age_days`` without reinforcement. Bounds the store to ``keep``
+    (most-recently-revised) so memory stays finite. Returns what was forgotten."""
+    now = time.time()
+    rows = _load()
+    kept, dropped = [], []
+    for b in rows:
+        ec = _eff_conf(b, now)
+        age_d = (now - b.get("last_revised", now)) / 86400.0
+        util = float(b.get("utility", 0.0))
+        stale = age_d > max_age_days
+        faded = ec < min_conf and util <= 0.0
+        if stale or faded:
+            dropped.append({"claim": b.get("claim", "")[:80],
+                            "reason": "stale" if stale else "faded",
+                            "eff_conf": round(ec, 3)})
+        else:
+            kept.append(b)
+    kept.sort(key=lambda b: b.get("last_revised", 0.0), reverse=True)
+    kept = kept[:keep]
+    if dropped:
+        _save(kept)
+    return {"kept": len(kept), "dropped": len(dropped), "forgot": dropped[:12]}
+
+
 def stats() -> dict:
     bs = all_beliefs()
     reg = "neutral"
