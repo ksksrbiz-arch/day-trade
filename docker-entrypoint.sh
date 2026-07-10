@@ -27,6 +27,9 @@ if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   # ML: train an initial model now (fast, Alpaca-backed) + keep it improving
   python -m trader.ml.train >> data/ml_train.log 2>&1 &
   python -m trader.ml.daemon --every 6 >> data/ml.log 2>&1 &
+  # heartbeat: publish real cached state to the mesh every ~30s so the /brain
+  # network stays visibly alive between the slower daemon cycles (esp. while closed).
+  python -m trader.pulse --loop --every 30 >> data/pulse.log 2>&1 &
   # autonomous PAPER trading loop, launched as a MANAGED bot so it registers in
   # data/bots.json and shows up (and is controllable) in the terminal's Bots
   # panel + /api/bots -- instead of an invisible raw process. autostart creates a

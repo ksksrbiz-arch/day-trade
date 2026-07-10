@@ -307,7 +307,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
     # ---- periodic STATE PULSES (each gated by its own TTL) ----
     # 5) predictions watching -> prediction layer -> confluence
     try:
-        if _due("pred", 45):
+        if _due("pred", 30):
             from trader.predict import store as pstore
             for p in pstore.predictions(status="watching", limit=5):
                 emit(f"pred{now_ms}_{p['symbol']}", l_id("prediction"), l_id("confluence"),
@@ -320,7 +320,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 
     # 6) ML model edge -> ml -> confluence
     try:
-        if _due("ml", 60):
+        if _due("ml", 40):
             from trader.ml.infer import model_card
             m = model_card()
             if m.get("trained"):
@@ -342,7 +342,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 
     # 8) transformer forecast -> cross-attention -> confluence (model_call)
     try:
-        if _due("tnet", 90):
+        if _due("tnet", 55):
             from trader import tnet
             fc = tnet.forecast("SPY")
             if "error" not in fc:
@@ -367,7 +367,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 
     # 10) Pieces MCP long-term memory -- writes (mirror) + recall (read)
     try:
-        if _due("ltm", 50):
+        if _due("ltm", 40):
             from trader import mesh
             salient = [r for r in mesh.recent(20) if (r.get("salience") or 0) >= 0.6]
             if salient:
@@ -382,7 +382,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 
     # 11) WSB buzz -> connector -> prediction
     try:
-        if _due("wsb", 70):
+        if _due("wsb", 55):
             from trader import wsb
             tks = wsb.buzz().get("tickers", [])[:5]
             if tks:
@@ -393,7 +393,7 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
 
     # 12) cross-attention drivers -> macro factor fires into the attention layer
     try:
-        if _due("drv", 90):
+        if _due("drv", 60):
             from trader import tnet
             dr = tnet.analyze("SPY").get("drivers", {}).get("weights", {})
             dmap = {"S&P 500": "x:spy", "Nasdaq": "x:qqq", "Treasury yields(inv)": "x:tlt",
@@ -402,6 +402,88 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
                 if w and w > 0.1 and fname in dmap:
                     emit(f"drv{now_ms}_{dmap[fname]}", dmap[fname], l_id("attention"),
                          "data_read", now_ms, "ok", None, f"{fname} drives {w:.0%}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # ---- always-on subsystem pulses (visible even while the market is closed) ----
+    # 13) internal state / mood -> brain -> confluence (modulation)
+    try:
+        if _due("psyche", 35):
+            from trader import psyche
+            st = psyche.state()
+            emit(f"psy{now_ms}", l_id("brain"), l_id("confluence"), "data_read", now_ms,
+                 "ok", None, f"mood {st.get('mood','')} val {st.get('valence',0):+.2f} cur {st.get('curiosity',0):.2f}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 14) self-built beliefs steering the voices -> confluence -> execution
+    try:
+        if _due("beliefs", 40):
+            from trader import beliefs
+            mult = beliefs.voice_multipliers(None) or {}
+            if mult:
+                top = sorted(mult.items(), key=lambda kv: abs(kv[1] - 1.0), reverse=True)[:3]
+                emit(f"bel{now_ms}", l_id("confluence"), l_id("execution"), "data_read", now_ms,
+                     "ok", None, "belief steering: " + ", ".join(f"{k} x{v:.2f}" for k, v in top))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 15) dream journal -> memory -> LTM store (data_write) -- while closed
+    try:
+        if _due("dream", 40):
+            from trader import dream, marketclock
+            if not marketclock.is_open():
+                j = (dream.last() or {}).get("journal")
+                if j:
+                    emit(f"drm{now_ms}", l_id("memory"), d_id("ltm"), "data_write", now_ms,
+                         "ok", None, j[:120])
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 16) autonomy decision -> supervisor service -> mesh (tool_call)
+    try:
+        if _due("auto", 45):
+            from trader import autonomy
+            aud = autonomy.recent_audit(1)
+            if aud:
+                e = aud[0]
+                st = "error" if e.get("status") == "error" else "ok"
+                emit(f"aut{now_ms}", s_id("supervisor"), l_id("mesh"), "tool_call", now_ms,
+                     st, None, f"{e.get('action','')}: {e.get('status','')}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 17) situational awareness -> reasoning -> mesh (data_write)
+    try:
+        if _due("aware", 50):
+            from trader import awareness
+            b = awareness.brief(1)
+            if b:
+                emit(f"awr{now_ms}", l_id("reasoning"), l_id("mesh"), "data_write", now_ms,
+                     "ok", None, b[:120])
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 18) regime read -> brain -> confluence
+    try:
+        if _due("regime", 40):
+            from trader import market_brain
+            reg = market_brain.cached_regime("neutral")
+            pe = market_brain.cached_posture("equity")
+            emit(f"reg{now_ms}", l_id("brain"), l_id("confluence"), "data_read", now_ms,
+                 "ok", None, f"regime {reg}; equity {pe.get('bias','')} x{pe.get('size_mult','')}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 19) episodic memory -> memory -> state.db (what it did, how it felt)
+    try:
+        if _due("episodes", 55):
+            from trader import episodes
+            stx = episodes.stats()
+            n = stx.get("total", 0) if isinstance(stx, dict) else 0
+            if n:
+                emit(f"epi{now_ms}", l_id("memory"), d_id("state"), "data_write", now_ms,
+                     "ok", None, f"episodic memory: {n} decisions, {stx.get('resolved',0)} resolved")
     except Exception:  # noqa: BLE001
         pass
 
