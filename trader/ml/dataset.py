@@ -27,8 +27,15 @@ def _series_by_symbol(conn, min_len: int):
 
 def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
                   threshold: float = 0.0, max_per_symbol: int = 400,
-                  conn=None):
-    """X, y, dates, syms, names. Label=1 if forward `horizon`-day return>threshold."""
+                  conn=None, market_relative: bool = True, neutral_band: float = 0.01):
+    """X, y, dates, syms, names.
+
+    Label = 1 if the sample's EXCESS forward return (stock minus market over the
+    same `horizon`) is positive, when ``market_relative`` (default) -- otherwise
+    raw direction. Samples whose |excess| < ``neutral_band`` are DROPPED so the
+    model trains on decisive moves, not near-zero noise. This targets
+    cross-sectional alpha instead of market beta, which is where price-based TA
+    features carry real signal."""
     own = conn is None
     try:                                  # CRSP may be absent (cloud) -> guard it
         conn = conn or connect()
@@ -37,6 +44,7 @@ def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
         series, own = {}, False
     if not series:                        # empty/absent CRSP -> Alpaca IEX daily bars
         series = _series_from_alpaca(min_len=lookback + horizon + 5)
+    bench = _benchmark_fwd_by_date(horizon) if market_relative else {}
     X, y, dates, syms = [], [], [], []
     for tk, sv in series.items():
         closes = [c for _, c in sv]
@@ -53,9 +61,14 @@ def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
             if not p0:
                 continue
             fwd = p1 / p0 - 1.0
+            asof = dts[t - 1]
+            base = bench.get(asof, 0.0) if market_relative else 0.0
+            excess = fwd - base - threshold
+            if neutral_band and abs(excess) < neutral_band:
+                continue                       # drop ambiguous near-zero moves
             X.append(vec)
-            y.append(1 if fwd > threshold else 0)
-            dates.append(dts[t - 1])
+            y.append(1 if excess > 0 else 0)
+            dates.append(asof)
             syms.append(tk)
             cnt += 1
             if cnt >= max_per_symbol:
@@ -107,6 +120,27 @@ def _alpaca_series(sym, limit=400, ttl=3600):
         return out
     except Exception:  # noqa: BLE001
         return []
+
+
+
+def _benchmark_fwd_by_date(horizon: int, symbol: str = "SPY") -> dict:
+    """Forward `horizon`-day return of the market proxy, keyed by START date.
+    Lets the dataset label a stock by whether it BEATS the market (excess return)
+    instead of raw direction -- removing the dominant market-beta component so the
+    model can learn the idiosyncratic/cross-sectional signal TA actually carries."""
+    try:
+        spy = _alpaca_series(symbol)
+    except Exception:  # noqa: BLE001
+        spy = []
+    m: dict = {}
+    if len(spy) > horizon:
+        dates = [d for d, _ in spy]
+        closes = [c for _, c in spy]
+        for i in range(len(closes) - horizon):
+            p0 = closes[i]
+            if p0:
+                m[dates[i]] = closes[i + horizon] / p0 - 1.0
+    return m
 
 
 def _series_from_alpaca(min_len):

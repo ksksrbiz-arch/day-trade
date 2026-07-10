@@ -1294,4 +1294,15 @@ def api_cognition_run(job: str = "brief"):
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.get("/api/ml/retrain")
+def api_ml_retrain(force: int = 0):
+    """Retrain the ML model now and report the challenger metrics. force=1 adopts
+    the new model regardless of the champion (use after a label-definition change)."""
+    try:
+        from trader.ml.train import train_once
+        return train_once(force_promote=bool(force))
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

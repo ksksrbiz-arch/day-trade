@@ -38,7 +38,7 @@ def _edge(y, p, top_frac=0.3):
 
 
 def train_once(horizon=10, lookback=60, val_frac=0.25, l2=1.0, epochs=500,
-               verbose=True) -> dict:
+               verbose=True, force_promote=False) -> dict:
     X, y, dates, syms, names = build_dataset(horizon=horizon, lookback=lookback)
     # learn from the system's OWN matured trades (closed feedback loop)
     n_trades = 0
@@ -90,7 +90,10 @@ def train_once(horizon=10, lookback=60, val_frac=0.25, l2=1.0, epochs=500,
 
     champ = LogisticModel.load(MODEL_PATH)
     champ_auc = champ.meta.get("auc", 0.0) if champ else 0.0
-    promote = champ is None or metrics["auc"] >= champ_auc + PROMOTE_MARGIN
+    # force_promote adopts the challenger regardless -- used when the LABEL
+    # DEFINITION changes (old champion measured a different target, so its AUC is
+    # not comparable).
+    promote = force_promote or champ is None or metrics["auc"] >= champ_auc + PROMOTE_MARGIN
     metrics["champion_auc"] = round(champ_auc, 4)
     metrics["promoted"] = bool(promote)
 
