@@ -1305,4 +1305,54 @@ def api_ml_retrain(force: int = 0, horizon: int = 20, lookback: int = 130):
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.get("/api/loop_health")
+def api_loop_health():
+    """End-to-end health of the trade->learn loop: does executing feed episodes,
+    do episodes resolve into post-mortem lessons, and do lessons earn belief
+    utility? Surfaces every link so a starved loop is obvious at a glance."""
+    out = {}
+    try:
+        from dashboard import dash_metrics
+        sm = dash_metrics.summary()
+        out["trading"] = {"decisions": sm.get("total_decisions", 0), "orders": sm.get("orders", 0),
+                          "top_skip_reasons": sm.get("by_reason", {})}
+    except Exception as e:  # noqa: BLE001
+        out["trading"] = {"error": str(e)[:80]}
+    try:
+        from trader import episodes
+        out["episodes"] = episodes.stats()
+    except Exception as e:  # noqa: BLE001
+        out["episodes"] = {"error": str(e)[:80]}
+    try:
+        from trader import beliefs
+        bs = beliefs.all_beliefs()
+        out["beliefs"] = {"total": len(bs),
+                          "with_utility": sum(1 for b in bs if abs(b.get("utility", 0.0)) > 1e-9)}
+    except Exception as e:  # noqa: BLE001
+        out["beliefs"] = {"error": str(e)[:80]}
+    try:
+        from trader import cognition
+        pm = cognition.last("postmortem")
+        out["postmortem"] = {"ts": pm.get("ts", ""), "lessons": len(pm.get("lessons", [])),
+                             "reviewed": pm.get("reviewed", 0)}
+    except Exception as e:  # noqa: BLE001
+        out["postmortem"] = {"error": str(e)[:80]}
+    try:
+        from trader.ml.infer import model_card
+        mc = model_card()
+        out["ml"] = {"auc": mc.get("auc"), "auc_lo": mc.get("auc_lo"),
+                     "trained_at": mc.get("trained_at"), "n_features": len(mc.get("importances", {}))}
+    except Exception as e:  # noqa: BLE001
+        out["ml"] = {"error": str(e)[:80]}
+    try:
+        from trader import alpha_engine
+        out["alpha_engine"] = alpha_engine.status()
+    except Exception as e:  # noqa: BLE001
+        out["alpha_engine"] = {"error": str(e)[:80]}
+    # a one-line verdict
+    tr = out.get("trading", {}); ep = out.get("episodes", {})
+    out["loop_closed"] = bool(tr.get("orders", 0) > 0 and ep.get("total", 0) > 0)
+    return out
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

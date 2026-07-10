@@ -77,6 +77,7 @@ def train_once(horizon=20, lookback=130, val_frac=0.25, l2=1.0, epochs=500,
         "auc": cv["cv_auc"],                     # report the honest CV AUC as the headline
         "auc_split": round(auc(yva, pva), 4),    # keep the old single-split for reference
         "cv_std": cv.get("cv_std", 0.0), "cv_folds": cv.get("folds", 0),
+        "auc_lo": cv.get("cv_auc_lo", round(cv["cv_auc"] - cv.get("cv_std", 0.0), 4)),
         "acc": round(accuracy(yva, pva), 4),
         "edge": round(_edge(yva, pva), 4),
         "n_train": int(len(Xtr)), "n_val": int(len(Xva)),
@@ -90,10 +91,14 @@ def train_once(horizon=20, lookback=130, val_frac=0.25, l2=1.0, epochs=500,
 
     champ = LogisticModel.load(MODEL_PATH)
     champ_auc = champ.meta.get("auc", 0.0) if champ else 0.0
-    # force_promote adopts the challenger regardless -- used when the LABEL
-    # DEFINITION changes (old champion measured a different target, so its AUC is
-    # not comparable).
-    promote = force_promote or champ is None or metrics["auc"] >= champ_auc + PROMOTE_MARGIN
+    # Significance gate: a challenger must show a CV AUC whose mean-minus-1-sigma
+    # clears coin-flip (0.51). This stops us from promoting overfit noise that
+    # merely edged the champion on a lucky split. The first model bootstraps
+    # regardless (we need something live); force_promote overrides for label/
+    # feature-dimension changes.
+    significant = metrics.get("auc_lo", 0.0) >= 0.51
+    beats = champ is None or metrics["auc"] >= champ_auc + PROMOTE_MARGIN
+    promote = force_promote or (beats and (significant or champ is None))
     metrics["champion_auc"] = round(champ_auc, 4)
     metrics["promoted"] = bool(promote)
 

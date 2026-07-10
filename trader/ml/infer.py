@@ -26,7 +26,15 @@ def score_from_closes(closes) -> float | None:
     m = _model()
     if m is None:
         return None
-    vec, _ = feature_vector(closes)
+    bench = None
+    try:
+        from .dataset import _alpaca_series
+        spy = _alpaca_series("SPY")
+        if spy:
+            bench = [c for _, c in spy][-len(closes):]
+    except Exception:  # noqa: BLE001
+        bench = None
+    vec, _ = feature_vector(closes, bench)
     if vec is None:
         return None
     try:

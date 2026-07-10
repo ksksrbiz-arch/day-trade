@@ -45,6 +45,13 @@ def build_dataset(horizon: int = 10, lookback: int = 130, step: int = 3,
     if not series:                        # empty/absent CRSP -> Alpaca IEX daily bars
         series = _series_from_alpaca(min_len=lookback + horizon + 5)
     bench = _benchmark_fwd_by_date(horizon) if market_relative else {}
+    # SPY close-by-date for the relative-strength FEATURES (not just the label)
+    spy_by_date: dict = {}
+    try:
+        for d, c in _alpaca_series("SPY"):
+            spy_by_date[d] = c
+    except Exception:  # noqa: BLE001
+        spy_by_date = {}
     X, y, dates, syms = [], [], [], []
     for tk, sv in series.items():
         closes = [c for _, c in sv]
@@ -54,7 +61,13 @@ def build_dataset(horizon: int = 10, lookback: int = 130, step: int = 3,
         # need lookback history before t and horizon after t
         for t in range(lookback, n - horizon, step):
             window = closes[t - lookback:t]
-            vec, _ = feature_vector(window)
+            bench_win = None
+            if spy_by_date:
+                bw = [spy_by_date.get(d) for d in dts[t - lookback:t]]
+                bw = [c for c in bw if c is not None]
+                if len(bw) >= 61:
+                    bench_win = bw
+            vec, _ = feature_vector(window, bench_win)
             if vec is None:
                 continue
             p0, p1 = closes[t - 1], closes[t - 1 + horizon]
@@ -89,9 +102,17 @@ if __name__ == "__main__":
 
 # --- cloud fallback: build training series from Alpaca IEX daily bars when the
 # local CRSP price cache is empty (e.g. a fresh container). Cached per process. ---
-_ALP_UNIVERSE = ["SPY", "QQQ", "IWM", "DIA", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
-                 "META", "TSLA", "JPM", "XOM", "UNH", "GLD", "TLT", "HYG", "AMD",
-                 "NFLX", "BAC", "WMT", "COST", "AVGO", "CRM"]
+_ALP_UNIVERSE = [
+    # broad + sector ETFs (market context for cross-sectional / relative strength)
+    "SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP",
+    # mega/large-cap equities across sectors
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "CRM", "ORCL",
+    "ADBE", "AMD", "NFLX", "INTC", "CSCO", "QCOM", "TXN", "IBM",
+    "JPM", "BAC", "GS", "MS", "WFC", "V", "MA", "AXP",
+    "XOM", "CVX", "COP", "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV",
+    "WMT", "COST", "HD", "PG", "KO", "PEP", "MCD", "DIS", "NKE", "BA", "CAT",
+    "GLD", "TLT", "HYG",
+]
 _ALP_SERIES_CACHE = {"ts": 0.0, "val": None}
 
 

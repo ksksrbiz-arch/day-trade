@@ -13,7 +13,7 @@ from .. import quant as _q
 FEATURES = [
     "rsi", "macd", "pctb", "stoch", "ema_cross", "mom20",
     "trend", "atr", "sharpe", "zsma", "persist",
-    "mom60", "mom120", "volratio",
+    "mom60", "mom120", "volratio", "relmom20", "relmom60",
 ]
 
 
@@ -31,7 +31,7 @@ def _clamp(x, lo=-1.0, hi=1.0):
         return 0.0
 
 
-def feature_vector(closes: list[float]):
+def feature_vector(closes: list[float], bench_closes: list[float] | None = None):
     """Return (vector, names) or (None, FEATURES) if too little history."""
     if not closes or len(closes) < 30:
         return None, FEATURES
@@ -68,9 +68,17 @@ def feature_vector(closes: list[float]):
                 volratio = _clamp((sr / lr - 1.0))
     except Exception:  # noqa: BLE001
         pass
+    # relative strength vs the market proxy -- the practical cross-sectional
+    # signal (a stock beating the market is the momentum/alpha the model targets).
+    # Self-contained + identical in train and serve (both pass a benchmark window),
+    # so there is no train/serve skew; abstains to 0 when no benchmark is supplied.
+    relmom20 = relmom60 = 0.0
+    if bench_closes and len(bench_closes) >= 61 and len(closes) >= 61:
+        relmom20 = _clamp((_ret_n(closes, 20) - _ret_n(bench_closes, 20)) / 0.15)
+        relmom60 = _clamp((_ret_n(closes, 60) - _ret_n(bench_closes, 60)) / 0.25)
     vec = [_clamp(rsi), _clamp(macd), _clamp(pctb), _clamp(stoch),
            _clamp(ema_cross), _clamp(mom20), _clamp(trend), atr,
-           sharpe, zsma, persist, mom60, mom120, volratio]
+           sharpe, zsma, persist, mom60, mom120, volratio, relmom20, relmom60]
     return vec, FEATURES
 
 
