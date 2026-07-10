@@ -178,7 +178,15 @@ def confirm_intent(intent, features, context, cfg: StrategyConfig,
             return False, f"short fights uptrend ret20={features.ret_20d:+.2f}"
 
     if cfg.regime_filter and market_regime == "high_vol":
-        return False, "high_vol regime: standing down (cross-asset stress)"
+        # Don't stand down ENTIRELY in high vol -- that starves the learning loop
+        # (no trades -> no resolved outcomes). Instead trade only STRONGLY
+        # trend-confirmed setups; the vol-target/Kelly sizing already shrinks size
+        # here and the drawdown breaker sits below. Weak/counter-trend -> blocked.
+        strong = ((intent.side == "buy" and features.above_sma20 and features.ret_20d > tol)
+                  or (intent.side in ("sell", "short") and not features.above_sma20
+                      and features.ret_20d < -tol))
+        if not strong:
+            return False, "high_vol: only strong trend-confirmed setups pass"
     if cfg.regime_filter and market_regime:
         if intent.side == "buy" and market_regime == "risk_off":
             return False, "long blocked in risk_off regime"

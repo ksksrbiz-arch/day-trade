@@ -130,7 +130,9 @@ def voice_multipliers(regime: str | None = None) -> dict:
             continue
         ec = _eff_conf(b, now)
         util = float(b.get("utility", 0.0))
-        authority = ec * max(0.3, min(1.0, 0.3 + 0.7 * (util + 1.0) / 2.0))
+        # UNTESTED beliefs stay advisory (tiny effect); authority ramps up only as
+        # the evaluator proves the belief useful (positive utility from episodes).
+        authority = ec * max(0.15, min(1.0, 0.15 + 0.85 * max(0.0, util)))
         if d < 0:
             factor = 1.0 - 0.6 * authority        # toward 0.4x
         else:
