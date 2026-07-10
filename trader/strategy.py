@@ -182,11 +182,16 @@ def confirm_intent(intent, features, context, cfg: StrategyConfig,
         # (no trades -> no resolved outcomes). Instead trade only STRONGLY
         # trend-confirmed setups; the vol-target/Kelly sizing already shrinks size
         # here and the drawdown breaker sits below. Weak/counter-trend -> blocked.
-        strong = ((intent.side == "buy" and features.above_sma20 and features.ret_20d > tol)
-                  or (intent.side in ("sell", "short") and not features.above_sma20
-                      and features.ret_20d < -tol))
-        if not strong:
-            return False, "high_vol: only strong trend-confirmed setups pass"
+        # Refuse COUNTER-trend setups in high vol, but allow TREND-ALIGNED ones
+        # (with the SMA and not strongly fighting momentum) to trade at the
+        # already-reduced high-vol size. Standing down on every setup starves the
+        # learning loop for the whole duration of a choppy high-vol regime; the
+        # vol-target/Kelly sizing + drawdown breaker keep the risk small.
+        aligned = ((intent.side == "buy" and features.above_sma20 and features.ret_20d > -tol)
+                   or (intent.side in ("sell", "short") and not features.above_sma20
+                       and features.ret_20d < tol))
+        if not aligned:
+            return False, "high_vol: counter-trend setup blocked"
     if cfg.regime_filter and market_regime:
         if intent.side == "buy" and market_regime == "risk_off":
             return False, "long blocked in risk_off regime"
