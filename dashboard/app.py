@@ -1258,4 +1258,33 @@ def api_dream_run():
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.get("/api/cognition")
+def api_cognition():
+    """Latest free-model cognition output: market brief, extracted news catalysts,
+    trade post-mortem lessons, risk-sentinel warnings, and belief adjudications."""
+    try:
+        from trader import cognition
+        return {"brief": cognition.last("brief"), "catalysts": cognition.last("catalysts"),
+                "postmortem": cognition.last("postmortem"), "risk": cognition.last("risk"),
+                "adjudicate": cognition.last("adjudicate")}
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:160]}
+
+
+@app.post("/api/cognition/run")
+def api_cognition_run(job: str = "brief"):
+    """Trigger one cognition job now (free-model, memory/analysis only, no trades).
+    job in: brief | catalysts | postmortem | risk | adjudicate."""
+    try:
+        from trader import cognition
+        fn = {"brief": cognition.brief, "catalysts": cognition.news_catalysts,
+              "postmortem": cognition.postmortem, "risk": cognition.risk_scan,
+              "adjudicate": cognition.adjudicate}.get(job)
+        if not fn:
+            return {"ok": False, "error": f"unknown job {job}"}
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

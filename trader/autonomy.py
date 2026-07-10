@@ -668,7 +668,119 @@ def _ap_dream(p):
             "session": res.get("session")}
 
 
+# ---- free-model cognition actions (LLM put to work, gated + auto-safe) ---- #
+def _llm_ready():
+    try:
+        from . import reasoner
+        return reasoner.available()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _cog_gate(name: str, gate: float):
+    """Shared eligibility: free models up + cadence elapsed."""
+    if not _llm_ready():
+        return None, {"eligible": False, "reason": "free models unavailable"}
+    last = _age_h(os.path.join(_DATA, f"{name}_last"))
+    if last is not None and last < gate:
+        return None, {"eligible": False, "reason": f"ran recently ({last}h < {gate}h)"}
+    return True, None
+
+
+def _cog_apply(name: str, fn):
+    import time as _t
+    res = fn()
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, f"{name}_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return res
+
+
+def _ev_llm_brief():
+    ok, blocked = _cog_gate("llm_brief", _gate_hours(3, 2))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "write a natural-language market brief",
+            "proposal": {"kind": "llm_brief"}}
+
+
+def _ap_llm_brief(p):
+    from . import cognition
+    return _cog_apply("llm_brief", cognition.brief)
+
+
+def _ev_llm_catalysts():
+    ok, blocked = _cog_gate("llm_catalysts", _gate_hours(2, 1))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "extract tradable catalysts from news",
+            "proposal": {"kind": "llm_catalysts"}}
+
+
+def _ap_llm_catalysts(p):
+    from . import cognition
+    return _cog_apply("llm_catalysts", cognition.news_catalysts)
+
+
+def _ev_llm_postmortem():
+    ok, blocked = _cog_gate("llm_postmortem", _gate_hours(8, 10))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "review resolved decisions -> lessons",
+            "proposal": {"kind": "llm_postmortem"}}
+
+
+def _ap_llm_postmortem(p):
+    from . import cognition
+    return _cog_apply("llm_postmortem", cognition.postmortem)
+
+
+def _ev_llm_risk():
+    ok, blocked = _cog_gate("llm_risk", _gate_hours(3, 1.5))
+    if not ok:
+        return blocked
+    return {"eligible": True, "reason": "risk sentinel: scan for tail/concentration risk",
+            "proposal": {"kind": "llm_risk"}}
+
+
+def _ap_llm_risk(p):
+    from . import cognition
+    return _cog_apply("llm_risk", cognition.risk_scan)
+
+
+def _ev_llm_adjudicate():
+    ok, blocked = _cog_gate("llm_adjudicate", _gate_hours(4, 6))
+    if not ok:
+        return blocked
+    try:
+        from . import beliefs
+        if not beliefs.conflicts():
+            return {"eligible": False, "reason": "no belief conflicts to resolve"}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"eligible": True, "reason": "adjudicate conflicting beliefs",
+            "proposal": {"kind": "llm_adjudicate"}}
+
+
+def _ap_llm_adjudicate(p):
+    from . import cognition
+    return _cog_apply("llm_adjudicate", cognition.adjudicate)
+
+
 ACTIONS = {
+    "llm_brief":            {"evaluate": _ev_llm_brief, "apply": _ap_llm_brief,
+                             "auto_safe": True, "desc": "free-model market brief (regime+forecast+news+dream -> language)"},
+    "llm_catalysts":        {"evaluate": _ev_llm_catalysts, "apply": _ap_llm_catalysts,
+                             "auto_safe": True, "desc": "free-model news->structured catalysts -> arm watchlist + beliefs"},
+    "llm_postmortem":       {"evaluate": _ev_llm_postmortem, "apply": _ap_llm_postmortem,
+                             "auto_safe": True, "desc": "free-model review of resolved decisions -> durable lessons"},
+    "llm_risk":             {"evaluate": _ev_llm_risk, "apply": _ap_llm_risk,
+                             "auto_safe": True, "desc": "free-model risk sentinel (advisory tail/concentration warnings)"},
+    "llm_adjudicate":       {"evaluate": _ev_llm_adjudicate, "apply": _ap_llm_adjudicate,
+                             "auto_safe": True, "desc": "free-model adjudication of conflicting self-built beliefs"},
     "dream":                {"evaluate": _ev_dream, "apply": _ap_dream,
                              "auto_safe": True, "desc": "sleep-phase consolidation while the market is closed (replay, consolidate, counterfactual dream, study, retrain)"},
     "tune_aggression":      {"evaluate": _ev_tune_aggression, "apply": _ap_tune_aggression,

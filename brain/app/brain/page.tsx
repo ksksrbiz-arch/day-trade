@@ -9,6 +9,7 @@ import NetworkView from "@/NetworkView";
 import BrainControls from "@/BrainControls";
 import PsychePanel from "@/PsychePanel";
 import DreamPanel from "@/DreamPanel";
+import CognitionPanel from "@/CognitionPanel";
 
 // r3f must be client-only — disable SSR for the WebGL canvas
 const BrainScene = dynamic(() => import("@/scene/BrainScene"), { ssr: false });
@@ -25,6 +26,7 @@ export default function BrainPage() {
       <BrainControls />
       <PsychePanel />
       <DreamPanel />
+      <CognitionPanel />
       <button
         onClick={() => setNetOpen(true)}
         style={{
