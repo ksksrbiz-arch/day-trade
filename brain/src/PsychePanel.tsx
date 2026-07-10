@@ -21,7 +21,7 @@ type Psyche = {
   curiosity?: number; stress?: number;
   drives?: { explore?: number; protect?: number; exploit?: number };
   modulation?: { exploration?: number };
-  beliefs?: { belief?: string; ts?: string }[];
+  beliefs?: { belief?: string; target?: string; direction?: number; regime?: string; confidence?: number; utility?: number }[];
   error?: string;
 };
 
@@ -32,14 +32,20 @@ const MOOD_COLOR: Record<string, string> = {
 
 export default function PsychePanel() {
   const [d, setD] = useState<Psyche | null>(null);
+  const [mult, setMult] = useState<Record<string, number>>({});
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const pull = async () => {
       try {
-        const r = await fetch(`${BASE}/api/psyche`, { cache: "no-store" });
-        if (r.ok && alive) setD(await r.json());
+        const [p, b] = await Promise.all([
+          fetch(`${BASE}/api/psyche`, { cache: "no-store" }).then((r) => r.json()),
+          fetch(`${BASE}/api/beliefs`, { cache: "no-store" }).then((r) => r.json()),
+        ]);
+        if (!alive) return;
+        setD(p);
+        setMult((b && b.voice_multipliers) || {});
       } catch {
         /* transient */
       }
@@ -108,16 +114,43 @@ export default function PsychePanel() {
         ))}
       </div>
 
+      {Object.keys(mult).length > 0 && (
+        <>
+          <div style={{ ...sec, marginTop: 6 }}>STEERING VOICES NOW</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+            {Object.entries(mult).map(([v, m]) => {
+              const up = (m as number) >= 1;
+              const c = up ? GREEN : RED;
+              return (
+                <span key={v} style={{ fontSize: 10, padding: "2px 7px", borderRadius: 6, background: c + "18", border: `1px solid ${c}44`, color: c }}>
+                  {v} {up ? "▲" : "▼"}×{(m as number).toFixed(2)}
+                </span>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       <div style={{ ...sec, marginTop: 6 }}>SELF-BUILT BELIEFS</div>
-      <div style={{ maxHeight: 150, overflow: "auto", display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ maxHeight: 150, overflow: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
         {(d?.beliefs || []).length === 0 && (
           <div style={{ fontSize: 10, color: "#5a6b7d" }}>forming beliefs from experience…</div>
         )}
-        {(d?.beliefs || []).slice(0, 8).map((b, i) => (
-          <div key={i} style={{ fontSize: 10.5, color: "#cfe0ea", lineHeight: 1.35, paddingLeft: 9, borderLeft: `2px solid ${VIOLET}66` }}>
-            {b.belief}
-          </div>
-        ))}
+        {(d?.beliefs || []).slice(0, 8).map((b, i) => {
+          const dir = b.direction ?? 0;
+          const dc = dir > 0 ? GREEN : dir < 0 ? RED : "#8ea6bb";
+          const arrow = dir > 0 ? "▲" : dir < 0 ? "▼" : "•";
+          return (
+            <div key={i} style={{ fontSize: 10.5, color: "#cfe0ea", lineHeight: 1.35, paddingLeft: 9, borderLeft: `2px solid ${VIOLET}66` }}>
+              {b.target && b.target !== "market" && (
+                <span style={{ color: dc, fontWeight: 700 }}>{b.target} {arrow} </span>
+              )}
+              {b.belief}
+              {b.regime && b.regime !== "any" && <span style={{ color: "#5a6b7d" }}> · {b.regime}</span>}
+              {(b.utility ?? 0) !== 0 && <span style={{ color: (b.utility ?? 0) > 0 ? GREEN : RED }}> · util {(b.utility ?? 0).toFixed(2)}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
