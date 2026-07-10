@@ -218,6 +218,43 @@ def _due(name: str, ttl: float) -> bool:
     return False
 
 
+
+# Map a mesh insight (layer, kind) to its TRUE fire-event kind so the network
+# view shows the real mix of operations -- model calls (council/reasoning),
+# tool calls (autonomy actions/scans), responses (reflection/narration), reads
+# (observing cached state), writes (persisting) -- instead of one flat colour.
+_KIND_BY_INSIGHT = {
+    # model invocations
+    "consensus": "model_call", "vote": "model_call", "summary": "model_call",
+    "plans": "model_call", "model": "model_call", "council": "model_call",
+    # the system speaking / concluding
+    "self_critique": "response", "reflect": "response", "journal": "response",
+    "dream": "response", "narrative": "response", "critique": "response",
+    # actions / tools executed
+    "action": "tool_call", "applied": "tool_call", "autonomy": "tool_call",
+    "scan": "tool_call", "search": "tool_call", "hypothesis": "tool_call",
+    "backtest": "tool_call", "catalyst": "tool_call",
+    # observing / reading state
+    "recall": "data_read", "regime": "data_read", "mood": "data_read",
+    "forecast": "data_read", "weights": "data_read", "beliefs": "data_read",
+    "awareness": "data_read", "digest": "data_read", "calibration": "data_read",
+    "factors": "data_read", "edge": "data_read", "attribution": "data_read",
+    # persisting
+    "episodes": "data_write", "persisted": "data_write", "mirror": "data_write",
+}
+
+
+def _mesh_fire_kind(layer: str, kind: str, status: str = "ok") -> str:
+    if status == "error":
+        return "error"
+    k = _KIND_BY_INSIGHT.get((kind or "").lower())
+    if k:
+        return k
+    if (layer or "").lower() in ("council", "reasoning"):
+        return "model_call"
+    return "data_write"
+
+
 def fire_events_since(cursor: float) -> tuple[list, float]:
     """Return (events newer than cursor epoch-secs, new_cursor)."""
     ids = _topo_ids()
@@ -260,7 +297,13 @@ def fire_events_since(cursor: float) -> tuple[list, float]:
             src = l_id(ins.get("layer", "mesh"))
             if src not in ids:
                 src = l_id("mesh")
-            emit(f"mesh{ins.get('id', i)}", src, d_id("mesh"), "data_write",
+            fkind = _mesh_fire_kind(ins.get("layer", "mesh"), ins.get("kind", ""))
+            # writes land in the mesh datastore; reads/calls/responses flow into
+            # the mesh layer node so the graph shows movement, not just storage
+            tgt = d_id("mesh") if fkind == "data_write" else l_id("mesh")
+            if src == tgt:
+                tgt = d_id("mesh")
+            emit(f"mesh{ins.get('id', i)}", src, tgt, fkind,
                  int(tsec * 1000), "ok", None, ins.get("text", ""))
     except Exception:  # noqa: BLE001
         pass
