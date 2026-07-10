@@ -1295,12 +1295,12 @@ def api_cognition_run(job: str = "brief"):
 
 
 @app.get("/api/ml/retrain")
-def api_ml_retrain(force: int = 0):
+def api_ml_retrain(force: int = 0, horizon: int = 10, lookback: int = 130):
     """Retrain the ML model now and report the challenger metrics. force=1 adopts
     the new model regardless of the champion (use after a label-definition change)."""
     try:
         from trader.ml.train import train_once
-        return train_once(force_promote=bool(force))
+        return train_once(horizon=horizon, lookback=lookback, force_promote=bool(force))
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)[:200]}
 

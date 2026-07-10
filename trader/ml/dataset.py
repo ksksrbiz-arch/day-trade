@@ -25,7 +25,7 @@ def _series_by_symbol(conn, min_len: int):
     return {k: v for k, v in series.items() if len(v) >= min_len}
 
 
-def build_dataset(horizon: int = 10, lookback: int = 60, step: int = 3,
+def build_dataset(horizon: int = 10, lookback: int = 130, step: int = 3,
                   threshold: float = 0.0, max_per_symbol: int = 400,
                   conn=None, market_relative: bool = True, neutral_band: float = 0.01):
     """X, y, dates, syms, names.

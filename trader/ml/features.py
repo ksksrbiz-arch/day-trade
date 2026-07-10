@@ -13,7 +13,15 @@ from .. import quant as _q
 FEATURES = [
     "rsi", "macd", "pctb", "stoch", "ema_cross", "mom20",
     "trend", "atr", "sharpe", "zsma", "persist",
+    "mom60", "mom120", "volratio",
 ]
+
+
+def _ret_n(closes, n):
+    """Simple return over the last n bars (0.0 if not enough history)."""
+    if not closes or len(closes) <= n or not closes[-n - 1]:
+        return 0.0
+    return closes[-1] / closes[-n - 1] - 1.0
 
 
 def _clamp(x, lo=-1.0, hi=1.0):
@@ -42,9 +50,27 @@ def feature_vector(closes: list[float]):
     sharpe = _clamp((ns.sharpe_20 if ns else 0.0) / 6)
     zsma = _clamp((ns.z_vs_sma20 if ns else 0.0) / 3)
     persist = _clamp(ns.persistence if ns else 0.0)
+    # long-horizon momentum (the classic 12-1 factor, in trading days): 60-day
+    # return, and 120->20 "skip-recent" momentum that avoids short-term reversal.
+    mom60 = _clamp(_ret_n(closes, 60) / 0.30)
+    mom120 = 0.0
+    if len(closes) > 121:
+        m = closes[-21] / closes[-121] - 1.0 if closes[-121] else 0.0
+        mom120 = _clamp(m / 0.40)
+    # volatility ratio: recent (20d) vs longer (60d) realized vol -> regime/expansion
+    volratio = 0.0
+    try:
+        import statistics as _st
+        rets = [closes[i] / closes[i - 1] - 1.0 for i in range(1, len(closes)) if closes[i - 1]]
+        if len(rets) >= 60:
+            sr = _st.pstdev(rets[-20:]); lr = _st.pstdev(rets[-60:])
+            if lr:
+                volratio = _clamp((sr / lr - 1.0))
+    except Exception:  # noqa: BLE001
+        pass
     vec = [_clamp(rsi), _clamp(macd), _clamp(pctb), _clamp(stoch),
            _clamp(ema_cross), _clamp(mom20), _clamp(trend), atr,
-           sharpe, zsma, persist]
+           sharpe, zsma, persist, mom60, mom120, volratio]
     return vec, FEATURES
 
 
