@@ -41,13 +41,15 @@ ROSTER = [
      "mandate": "Protect capital. In high_vol or risk_off regimes you MUST act: propose_param to "
                 "raise MIN_CONFIDENCE (toward 0.65-0.75) or lengthen COOLDOWN_MIN (toward 60-90)."},
     {"name": "Macro Analyst", "provider": "cloudflare",
-     "tools": ["news_sentiment", "wsb_buzz", "brain_state", "confluence"],
-     "mandate": "Read the tape and headlines (Cloudflare sentiment). Report whether "
-                "macro supports or opposes current positioning."},
+     "tools": ["news_sentiment", "wsb_buzz", "brain_state", "confluence", "web_search"],
+     "mandate": "Read the tape and headlines. Use web_search to look up CURRENT events, "
+                "catalysts, or anything you are unsure about. Report whether macro "
+                "supports or opposes current positioning."},
     {"name": "Strategy Critic", "provider": "vercel", "model": "openai/gpt-4o-mini",
-     "tools": ["latest_backtest", "ml_card", "recall", "propose_param"],
+     "tools": ["latest_backtest", "ml_card", "recall", "propose_param", "web_search"],
      "mandate": "Independently critique the desk. If backtest edge is negative or the "
-                "ML edge is thin, propose a bounded selectivity change and explain the risk."},
+                "ML edge is thin, propose a bounded selectivity change and explain the risk. "
+                "Use web_search to check whether current conditions justify the current stance."},
     {"name": "Performance Auditor", "provider": "cloudflare",
      "tools": ["edge_report", "attribution", "voices_state", "mute_voice", "pin_voice"],
      "mandate": "Self-tune the confluence ensemble from REALIZED forward performance. "

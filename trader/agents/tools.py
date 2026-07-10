@@ -88,6 +88,14 @@ def t_recall(query: str = "", **_):
     return {"memories": memory.recall(query or "trading regime risk", k=3)}
 
 
+def t_web_search(query: str = "", **_):
+    """Look ANYTHING up on the live web (DuckDuckGo, no API key) -- current news,
+    events, prices, definitions -- whenever the desk needs information it doesn't
+    already hold."""
+    from .. import websearch
+    return {"query": query, "results": websearch.search(query, k=5)}
+
+
 # ----------------------- mutating / governed tools -------------------------- #
 def t_run_backtest(agent: str = "system", days: int = 900, pit_asof: str = None, **_):
     try:
@@ -238,6 +246,8 @@ REGISTRY = {
                         "desc": "WallStreetBets social buzz / cross-reference a ticker (arg: symbol)"},
     "recall":          {"fn": t_recall, "mutating": False,
                         "desc": "recall similar past situations (arg: query)"},
+    "web_search":      {"fn": t_web_search, "mutating": False,
+                        "desc": "search the live web via DuckDuckGo for current info (arg: query)"},
     "run_backtest":    {"fn": t_run_backtest, "mutating": True,
                         "desc": "run a walk-forward backtest (args: days, pit_asof)"},
     "retrain_ml":      {"fn": t_retrain_ml, "mutating": True,

@@ -1222,4 +1222,15 @@ def api_psyche_reflect():
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.get("/api/search")
+def api_search(q: str = "", k: int = 5):
+    """The brain's live web lookup (DuckDuckGo, no API key). The agent mesh can
+    also call this autonomously as the 'web_search' tool."""
+    try:
+        from trader import websearch
+        return {"query": q, "results": websearch.search(q, k=max(1, min(10, k)))}
+    except Exception as e:  # noqa: BLE001
+        return {"query": q, "results": [], "error": str(e)[:160]}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
