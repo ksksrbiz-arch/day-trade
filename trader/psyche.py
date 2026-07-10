@@ -213,12 +213,20 @@ def reflect() -> dict:
     try:
         from . import beliefs as _b
         conflicts = _b.conflicts()
-        behav = None
         from . import episodes as _ep
         behav = _ep.behavior_stats()[:4]
         similar = _ep.recall_similar(g["regime"], st["mood"])
     except Exception:  # noqa: BLE001
         conflicts, behav, similar = [], [], {}
+    voice_perf = ""
+    try:                                       # ground beliefs in REAL voice performance
+        from . import attribution
+        vs = attribution.report().get("voices", [])
+        parts = [f"{v['voice']} {v['attributed_return_pct']:+.2f}%" for v in vs
+                 if not str(v.get("verdict", "")).startswith("maturing")]
+        voice_perf = ", ".join(parts)
+    except Exception:  # noqa: BLE001
+        pass
 
     focus = ""
     if conflicts:
@@ -243,6 +251,7 @@ def reflect() -> dict:
         f"stress={st['stress']}, recovering={st['recovering']}. "
         f"Facts: measured edge={g['edge']:.4f} (0=none), regime={g['regime']}, "
         f"drawdown={g['drawdown']}%, decisions learned from={g['resolved']}. "
+        f"Voice performance so far (mean attributed return/decision): {voice_perf or 'still maturing'}. "
         f"My behaviour by state (avg return %): {behav}. "
         f"Outcomes last time I was {st['mood']} in {g['regime']}: {similar}.{focus}"
     )
