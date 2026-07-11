@@ -47,7 +47,9 @@ def _confluence_gate(intent, md, regime, cfg):
     reg = regime if regime in ("risk_on", "risk_off", "high_vol", "neutral") else "neutral"
     return _alpha.analyze(closes, symbol=intent.symbol, fundamental_score=fscore,
                           regime=reg, min_agree=cfg.strategy.confluence_min_agree,
-                          min_composite=cfg.strategy.confluence_min_score)
+                          min_composite=cfg.strategy.confluence_min_score,
+                          use_rl=cfg.strategy.use_rl_voice, rl_window=cfg.strategy.rl_window,
+                          rl_model_dir=cfg.strategy.rl_model_dir or None)
 
 from . import market_brain
 from .watchlist import WatchList
@@ -402,6 +404,92 @@ def run_scalper(cfg, broker, md, optbroker) -> int:
     return acted
 
 
+_rl_trader = None
+_rl_warned = False
+
+
+def run_rl(cfg, broker, md, optbroker) -> int:
+    """Full RL trader (mode == "rl"). A TensorTrade DQN makes the long/flat call
+    per symbol; the resulting Intent still flows through the platform's execution
+    guardrails (confirmation, policy, safety lock, circuit breaker, sizing).
+
+    Requires the optional RL extra (`requirements-rl.txt`) and a trained model
+    per symbol (`python -m trader.rl.cli train SYM`). Missing model -> skip.
+    """
+    global _rl_trader, _rl_warned
+    if not _breaker_ok(cfg, broker):
+        return 0
+    try:
+        from . import rl as _rl
+    except Exception as e:  # noqa: BLE001
+        if not _rl_warned:
+            print(f"[rl] import failed ({e}); is requirements-rl.txt installed?")
+            _rl_warned = True
+        return 0
+    if not _rl.available():
+        if not _rl_warned:
+            print("[rl] TensorTrade not installed -- run: "
+                  "pip install --no-build-isolation -r requirements-rl.txt")
+            _rl_warned = True
+        return 0
+    if _rl_trader is None:
+        _rl_trader = _rl.RLTrader(window=cfg.strategy.rl_window,
+                                  slippage_bps=cfg.sim.slippage_bps,
+                                  model_dir=cfg.strategy.rl_model_dir or None)
+
+    uni = list(cfg.strategy.rl_universe)
+    print(f"[{datetime.now(timezone.utc):%H:%M:%S}] rl scan {len(uni)} symbols")
+    regime = market_brain.cached_regime() or "neutral"
+    open_syms = broker.open_symbols()
+    acted = 0
+    for sym in uni:
+        if sym in open_syms:
+            continue
+        cd = cfg.strategy.cooldown_min
+        if cd > 0 and sym in _last_entry and (time.time() - _last_entry[sym]) < cd * 60:
+            continue
+        closes = md.recent_closes(sym, lookback_days=max(120, cfg.strategy.rl_window * 4)) if md else []
+        ts = datetime.now(timezone.utc).isoformat()
+        if len(closes) < cfg.strategy.rl_window + 2:
+            _log_row(cfg.trade_log, {"ts": ts, "action": "skip", "symbol": sym, "event": "rl",
+                                     "gate_reason": f"thin history ({len(closes)} bars)"})
+            continue
+        try:
+            intent = _rl_trader.decide(sym, closes, cfg.strategy, open_syms)
+        except Exception as e:  # noqa: BLE001
+            _log_row(cfg.trade_log, {"ts": ts, "action": "skip", "symbol": sym, "event": "rl",
+                                     "gate_reason": f"rl error: {str(e)[:80]}"})
+            continue
+        if intent is None:
+            _log_row(cfg.trade_log, {"ts": ts, "action": "skip", "symbol": sym, "side": "buy",
+                                     "event": "rl", "regime": regime, "gate_reason": "rl policy: flat"})
+            continue
+        synth = Label(tickers=[sym], sentiment=0.6, confidence=0.6, event_type="rl")
+        features = md.features(sym) if md is not None else None
+        ok, reason = confirm_intent(intent, features, None, cfg.strategy, regime)
+        if not ok:
+            _log_row(cfg.trade_log, {"ts": ts, "action": "skip_unconfirmed", "symbol": sym,
+                                     "side": intent.side, "event": "rl", "regime": regime,
+                                     **_ctx_fields(features, None), "gate_reason": reason})
+            continue
+        intent = size_and_exits(intent, synth, features, cfg.strategy)
+        _pm = market_brain.cached_posture("equity").get("size_mult", 1.0)
+        intent.notional = round(intent.notional * max(0.3, min(2.0, _pm)), 2)
+        oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg)
+        if oid:
+            _log_episode(exec_sym, intent.side, broker.last_price(sym), regime)
+        open_syms.add(sym)
+        _last_entry[sym] = time.time()
+        acted += 1
+        _log_row(cfg.trade_log, {"ts": ts, "action": "order" if oid else "order_failed",
+                                 "symbol": exec_sym, "side": intent.side, "event": "rl",
+                                 "instrument": instrument, "notional": round(intent.notional, 2),
+                                 "tp": intent.take_profit_pct, "sl": intent.stop_loss_pct,
+                                 "regime": regime, **_ctx_fields(features, None),
+                                 "gate_reason": f"RL STRIKE {intent.reason} | {note}"})
+    return acted
+
+
 def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
     """Watch -> wait -> strike. News ARMS watches; the bot only STRIKES when price
     confirms the thesis (breakout/breakdown), else the watch expires."""
@@ -511,7 +599,7 @@ def main() -> None:
 
     missing = [n for n, v in [("ALPACA_API_KEY", cfg.alpaca_key),
                               ("ALPACA_SECRET_KEY", cfg.alpaca_secret)] if not v]
-    if missing and cfg.strategy.mode == "news":
+    if missing and cfg.strategy.mode in ("news", "rl"):
         raise SystemExit(f"Missing env vars: {', '.join(missing)}")
     if not cfg.alpaca_paper:
         raise SystemExit("ALPACA_PAPER is false. Paper only.")
@@ -521,7 +609,7 @@ def main() -> None:
     labeler = Labeler() if mode in ("news", "daytrader") else None
 
     md = groq = None
-    need_md = cfg.strategy.require_confirmation or mode in ("scalper", "daytrader") or cfg.strategy.use_ofi
+    need_md = cfg.strategy.require_confirmation or mode in ("scalper", "daytrader", "rl") or cfg.strategy.use_ofi
     if need_md:
         massive = MassiveClient(cfg.massive_access, cfg.massive_secret, cfg.massive_endpoint, cfg.massive_bucket)
         md = MarketData(cfg.alpaca_key, cfg.alpaca_secret, massive=massive)
@@ -550,6 +638,8 @@ def main() -> None:
         try:
             if mode == "scalper":
                 run_scalper(cfg, broker, md, optbroker)
+            elif mode == "rl":
+                run_rl(cfg, broker, md, optbroker)
             else:
                 if mode == "daytrader":
                     run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni)

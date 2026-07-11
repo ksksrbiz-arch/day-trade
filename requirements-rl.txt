@@ -1,0 +1,17 @@
+# --- Optional RL extra: the TensorTrade full RL trader (mode == "rl") ---
+#
+# This is NOT part of the lean core. It pulls in TensorFlow/Keras/gym/pandas
+# (~1 GB) and is only needed when you actually train or run the RL trader.
+#
+# IMPORTANT: tensortrade 1.0.3 (the only PyPI release) ships a legacy setup.py
+# that fails under modern setuptools' build isolation. Install with the flag:
+#
+#     pip install --no-build-isolation -r requirements-rl.txt
+#
+# The core app lazy-imports TensorTrade and boots fine WITHOUT this installed;
+# `trader.rl.available()` gates every RL code path.
+
+tensortrade==1.0.3
+# TensorTrade's bundled agents are dead on Keras 3 (Adam(lr=) was removed), so
+# trader/rl/agent.py supplies its own Keras-3-correct DQN. TensorFlow arrives
+# transitively via tensortrade; pin here only if you need a specific build.
