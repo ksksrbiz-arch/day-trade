@@ -130,6 +130,7 @@ def load() -> AppConfig:
         rl_universe=tuple(s.strip().upper() for s in os.getenv("RL_UNIVERSE", "").split(",") if s.strip()),
         rl_window=int(os.getenv("RL_WINDOW", "20")),
         rl_model_dir=os.getenv("RL_MODEL_DIR", ""),
+        use_rl_voice=_env_bool("USE_RL_VOICE", False),
         use_confluence=_env_bool("USE_CONFLUENCE", False),
         confluence_min_agree=int(os.getenv("CONFLUENCE_MIN_AGREE", "2")),
         confluence_min_score=float(os.getenv("CONFLUENCE_MIN_SCORE", "0.20")),

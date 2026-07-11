@@ -87,6 +87,7 @@ class StrategyConfig:
     rl_universe: tuple = ()          # symbols the RL trader scans each cycle
     rl_window: int = 20              # observation lookback (bars) for the DQN
     rl_model_dir: str = ""           # where trained models live ("" -> data/rl)
+    use_rl_voice: bool = False       # add the RL DQN as a confluence method (all modes)
     # --- confluence brain (technical + fundamental + quant + council) ---
     use_confluence: bool = False     # require multi-method agreement before trading
     confluence_min_agree: int = 2    # how many methods must agree on direction

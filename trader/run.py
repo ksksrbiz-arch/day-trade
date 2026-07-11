@@ -47,7 +47,9 @@ def _confluence_gate(intent, md, regime, cfg):
     reg = regime if regime in ("risk_on", "risk_off", "high_vol", "neutral") else "neutral"
     return _alpha.analyze(closes, symbol=intent.symbol, fundamental_score=fscore,
                           regime=reg, min_agree=cfg.strategy.confluence_min_agree,
-                          min_composite=cfg.strategy.confluence_min_score)
+                          min_composite=cfg.strategy.confluence_min_score,
+                          use_rl=cfg.strategy.use_rl_voice, rl_window=cfg.strategy.rl_window,
+                          rl_model_dir=cfg.strategy.rl_model_dir or None)
 
 from . import market_brain
 from .watchlist import WatchList

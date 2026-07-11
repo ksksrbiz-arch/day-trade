@@ -79,6 +79,40 @@ BSH action, and — when the agent wants to be long — emits a buy `Intent` tha
 confirmed, sized, and routed exactly like every other entry. Symbols without a
 trained model are skipped and logged.
 
+## Two ways to use it
+
+The RL agent plugs into the platform at **two** levels:
+
+### 1. Standalone brain — `MODE=rl`
+The RL policy makes the buy/flat call for `RL_UNIVERSE` symbols (shown above). It
+runs *instead of* the news/scalper/daytrader loops.
+
+### 2. Confluence voice — `USE_RL_VOICE=true` (works in every mode)
+The RL agent also plugs into the **confluence brain** as a first-class method
+(`rl`), sitting alongside `ta`, `quant`, `fundamental`, `ml`, `cortex`, etc. When
+enabled, the DQN's long/flat conviction (`tanh(Q_long − Q_flat)`, bounded to
+[-1, 1]) becomes one vote in the multi-method agreement gate that `news` and
+`daytrader` modes already use. This is the deeper integration: the RL signal
+contributes to conviction and position sizing everywhere, not just in `MODE=rl`.
+
+```bash
+USE_CONFLUENCE=true      # the confluence gate must be on
+USE_RL_VOICE=true        # add the RL voice to the blend
+RL_WINDOW=20             # must match how the models were trained
+# train models for the symbols you trade, then run any mode (news/daytrader/rl)
+```
+
+The voice is **absent** (contributes nothing) whenever the RL extra isn't
+installed or there's no trained model for the symbol — so turning it on can only
+add information, never break a decision. Regime weights for the `rl` voice live
+in `alpha._REGIME_W` (trusted more in trending regimes, trimmed in high-vol), and
+its blended score is logged in the confluence `reason` and fed to the `cortex`
+fuser and reasoning trace like every other method.
+
+Model status is exposed at **`GET /api/rl`** on the dashboard backend (extra
+availability, config, and per-symbol trained models — read from metadata without
+loading TensorFlow).
+
 ## How it works
 
 ```

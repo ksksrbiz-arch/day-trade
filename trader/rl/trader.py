@@ -16,6 +16,7 @@ Intent when the agent wants to be long and we're flat, and None otherwise.
 """
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 
@@ -32,6 +33,29 @@ def model_path(symbol: str, model_dir: str | None = None) -> str:
     d = model_dir or DEFAULT_MODEL_DIR
     safe = symbol.replace("/", "_").upper()
     return os.path.join(d, safe)
+
+
+_VOICE: "RLTrader | None" = None
+
+
+def score_from_closes(symbol: str, closes, window: int = 20, model_dir: str | None = None):
+    """Confluence-voice entry point: bounded RL conviction in [-1, 1], or None.
+
+    Uses a process-wide cached `RLTrader` (models load once, then stay warm) so
+    this is cheap to call in the hot decision path. Returns None whenever the RL
+    extra isn't installed or there's no trained model for `symbol` -- in which
+    case the voice is simply absent from the blend, changing nothing.
+    """
+    global _VOICE
+    from . import available
+    if not available():
+        return None
+    if _VOICE is None or _VOICE.window != int(window) or (model_dir and _VOICE.model_dir != model_dir):
+        _VOICE = RLTrader(window=int(window), model_dir=model_dir or None)
+    try:
+        return _VOICE.score_signal(symbol, closes)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 @dataclass
@@ -115,6 +139,28 @@ class RLTrader:
             return None
         obs = latest_window(closes, self.window)
         return agent.act(obs, epsilon=0.0)
+
+    def score_signal(self, symbol: str, closes) -> float | None:
+        """Bounded conviction in [-1, 1] for the confluence brain, or None.
+
+        Derived from the DQN's Q-gap between the long and flat actions on the
+        latest window: tanh(Q_long - Q_flat). Positive => the policy prefers being
+        long. None when there's no trained model (voice simply absent). The
+        observation window is read from the model's own metadata so it always
+        matches how the model was trained, regardless of caller config.
+        """
+        agent = self._get_agent(symbol)
+        if agent is None:
+            return None
+        try:
+            window = int(getattr(agent, "meta", {}).get("window", self.window))
+            obs = latest_window(closes, window)
+            q = agent.q_values(obs)
+            if q is None or len(q) < 2:
+                return None
+            return max(-1.0, min(1.0, math.tanh(float(q[1] - q[0]))))
+        except Exception:  # noqa: BLE001
+            return None
 
     def decide(self, symbol: str, closes, cfg, open_symbols=None):
         """Return a buy `Intent` when the RL policy wants to be long and we're flat.

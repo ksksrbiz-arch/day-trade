@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from .features import build_features, latest_window, FEATURE_NAMES
 from .env import EnvConfig, build_env, buy_and_hold_return
-from .trader import RLTrader, RLResult, model_path
+from .trader import RLTrader, RLResult, model_path, score_from_closes
 
 __all__ = [
-    "available", "RLTrader", "RLResult", "model_path",
+    "available", "RLTrader", "RLResult", "model_path", "score_from_closes",
     "EnvConfig", "build_env", "buy_and_hold_return",
     "build_features", "latest_window", "FEATURE_NAMES",
 ]

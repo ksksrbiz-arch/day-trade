@@ -60,6 +60,38 @@ def test_model_path_is_symbol_safe():
     assert p.endswith("BTC_USD")
 
 
+# ---- confluence-voice wiring (pure; no TF needed) ------------------------ #
+
+def test_confluence_accepts_rl_voice():
+    """The RL score participates as a first-class confluence method."""
+    from trader.alpha import confluence
+    conv = confluence(ta=0.5, quant=0.4, rl=0.6, regime="neutral",
+                      min_agree=2, min_composite=0.10)
+    assert "rl" in conv.scores
+    assert conv.side == "buy"
+    # a strong opposing RL vote drags the composite toward flat/sell
+    opp = confluence(ta=0.5, quant=0.4, rl=-0.9, regime="neutral",
+                     min_agree=2, min_composite=0.10)
+    assert opp.composite < conv.composite
+
+
+def test_confluence_rl_absent_by_default():
+    """analyze() must not add an rl voice unless use_rl is set (back-compat)."""
+    import numpy as np
+    from trader.alpha import analyze
+    closes = list(100 + np.cumsum(np.random.RandomState(4).normal(0, 1, 80)))
+    conv = analyze(closes, symbol="ZZZ", regime="neutral", min_agree=1, min_composite=0.05)
+    assert "rl" not in conv.scores
+
+
+def test_score_from_closes_none_without_model(tmp_path):
+    from trader.rl import score_from_closes
+    import numpy as np
+    closes = list(100 + np.cumsum(np.random.RandomState(6).normal(0, 1, 60)))
+    # empty model dir -> no model -> voice absent (None), never raises
+    assert score_from_closes("NOPE", closes, window=10, model_dir=str(tmp_path)) is None
+
+
 # ---- env / agent tests (need the RL extra) ------------------------------- #
 
 @rl_only
@@ -103,6 +135,17 @@ def test_train_backtest_decide_roundtrip(tmp_path):
     assert pos in (0, 1)
     intent = rt2.decide("TEST", closes, StrategyConfig(), open_symbols={"TEST"})
     assert intent is None  # already open -> never re-enters
+
+
+@rl_only
+def test_score_from_closes_bounded_with_model(tmp_path):
+    from trader.rl import RLTrader, score_from_closes
+    rng = np.random.RandomState(9)
+    closes = (100 + np.cumsum(rng.normal(0.05, 1, 140))).tolist()
+    RLTrader(window=10, model_dir=str(tmp_path)).train(
+        "VOX", closes, episodes=1, max_steps=120, warmup=32, batch_size=16, verbose=False)
+    s = score_from_closes("VOX", closes, window=10, model_dir=str(tmp_path))
+    assert s is not None and -1.0 <= s <= 1.0
 
 
 @rl_only

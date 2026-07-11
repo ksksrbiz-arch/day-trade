@@ -248,6 +248,46 @@ def scoreboard(bot: str | None = None):
     return M.summary(bot)
 
 
+@app.get("/api/rl")
+def rl_status():
+    """TensorTrade RL trader telemetry: extra availability, config, and the
+    trained models on disk (read from .meta.json sidecars -- no TensorFlow load)."""
+    def _b():
+        import glob
+        import json
+        out = {
+            "available": False,
+            "mode": cfg.strategy.mode,
+            "voice_enabled": cfg.strategy.use_rl_voice,
+            "universe": list(cfg.strategy.rl_universe),
+            "window": cfg.strategy.rl_window,
+            "models": [],
+        }
+        try:
+            from trader import rl as _rl
+            out["available"] = _rl.available()
+            model_dir = cfg.strategy.rl_model_dir or _rl.trader.DEFAULT_MODEL_DIR
+        except Exception:  # noqa: BLE001
+            return out
+        out["model_dir"] = model_dir
+        for meta_path in sorted(glob.glob(os.path.join(model_dir, "*.meta.json"))):
+            try:
+                d = json.load(open(meta_path))
+            except Exception:  # noqa: BLE001
+                continue
+            base = os.path.basename(meta_path)[:-len(".meta.json")]
+            meta = d.get("meta", {})
+            out["models"].append({
+                "symbol": meta.get("symbol", base),
+                "window": meta.get("window", d.get("obs_shape", [None])[0]),
+                "episodes_trained": meta.get("episodes_trained"),
+                "last_rewards": meta.get("last_rewards"),
+                "trained": os.path.exists(os.path.join(model_dir, base + ".keras")),
+            })
+        return out
+    return cached("rl_status", 15.0, _b)
+
+
 @app.get("/api/bots")
 def list_bots():
     bots = botmgr.list_bots()

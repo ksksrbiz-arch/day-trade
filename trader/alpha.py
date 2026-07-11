@@ -25,12 +25,12 @@ from statistics import fmean
 # Regime -> method weight multipliers. Trend regimes trust price/quant momentum;
 # stress trusts fundamentals (quality) and shrinks risk; ranges balance.
 _REGIME_W = {
-    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.2},
-    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "alpha_engine": 1.2, "cortex": 1.1, "factors": 1.0},
-    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "alpha_engine": 1.2, "cortex": 1.0, "factors": 0.85},
-    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.1},
+    "risk_on":  {"ta": 1.2, "quant": 1.2, "fundamental": 0.8, "council": 1.0, "ml": 1.2, "prediction": 1.0, "tnet": 1.2, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.2, "rl": 1.2},
+    "risk_off": {"ta": 1.1, "quant": 1.1, "fundamental": 1.2, "council": 1.0, "ml": 1.0, "prediction": 1.0, "tnet": 1.0, "alpha_engine": 1.2, "cortex": 1.1, "factors": 1.0, "rl": 0.9},
+    "high_vol": {"ta": 0.8, "quant": 0.9, "fundamental": 1.3, "council": 0.8, "ml": 0.9, "prediction": 0.9, "tnet": 0.85, "alpha_engine": 1.2, "cortex": 1.0, "factors": 0.85, "rl": 0.85},
+    "neutral":  {"ta": 1.0, "quant": 1.0, "fundamental": 1.0, "council": 1.0, "ml": 1.1, "prediction": 1.0, "tnet": 1.1, "alpha_engine": 1.0, "cortex": 1.2, "factors": 1.1, "rl": 1.1},
 }
-_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "alpha_engine": 0.14, "cortex": 0.30, "factors": 0.24}
+_BASE_W = {"ta": 0.30, "quant": 0.26, "fundamental": 0.15, "council": 0.10, "ml": 0.28, "prediction": 0.18, "tnet": 0.20, "alpha_engine": 0.14, "cortex": 0.30, "factors": 0.24, "rl": 0.22}
 
 _emph_cache = {"ts": 0.0, "val": None}
 
@@ -70,13 +70,13 @@ def _norm(weights: dict, present: set[str]) -> dict:
 
 def confluence(ta=None, quant=None, fundamental=None, council=None, ml=None,
                prediction=None, tnet=None, alpha_engine=None, cortex=None, factors=None,
-               regime: str | None = None, min_agree: int = 2,
+               rl=None, regime: str | None = None, min_agree: int = 2,
                min_composite: float = 0.20, size_min: float = 0.5,
                size_max: float = 2.0) -> Conviction:
     """Blend method scores (each in [-1,1], or None if unavailable)."""
     raw = {"ta": ta, "quant": quant, "fundamental": fundamental, "council": council,
            "ml": ml, "prediction": prediction, "tnet": tnet, "alpha_engine": alpha_engine,
-           "cortex": cortex, "factors": factors}
+           "cortex": cortex, "factors": factors, "rl": rl}
     # human-in-the-loop voice overrides (mute drops a voice; pin locks its weight)
     try:
         from . import voices as _voices
@@ -141,6 +141,8 @@ def analyze(closes: list[float], panel: dict | None = None,
             tnet_score: float | None = None, use_tnet: bool = True,
             alpha_engine_score: float | None = None, use_alpha_engine: bool = True,
             use_cortex: bool = True,
+            rl_score: float | None = None, use_rl: bool = False, rl_window: int = 20,
+            rl_model_dir: str | None = None,
             **gate_kwargs) -> Conviction:
     """Build TA + quant scores from histories and blend with optional
     fundamental/council scores. `panel` enables the cross-sectional quant view;
@@ -190,6 +192,14 @@ def analyze(closes: list[float], panel: dict | None = None,
             alpha_engine_score = _ae.score_signal(symbol)
         except Exception:  # noqa: BLE001
             alpha_engine_score = None
+    # TensorTrade RL voice: the DQN's long/flat conviction from price features.
+    # Absent (None) unless the RL extra is installed AND a model exists for `symbol`.
+    if rl_score is None and use_rl and closes:
+        try:
+            from .rl import score_from_closes as _rl_score
+            rl_score = _rl_score(symbol, closes, window=rl_window, model_dir=rl_model_dir or None)
+        except Exception:  # noqa: BLE001
+            rl_score = None
     # neural core: a nonlinear fuser over the other voices (gated off until proven)
     cortex_score = None
     if use_cortex:
@@ -198,7 +208,7 @@ def analyze(closes: list[float], panel: dict | None = None,
             if _cx.enabled() and _cx.card().get("trained"):
                 _scores = {"ta": ta_score, "quant": quant_score, "fundamental": fundamental_score,
                            "ml": ml_score, "council": council_score, "prediction": prediction_score,
-                           "tnet": tnet_score, "alpha_engine": alpha_engine_score}
+                           "tnet": tnet_score, "alpha_engine": alpha_engine_score, "rl": rl_score}
                 _conv = _cx.conviction(_scores)
                 cortex_score = _conv["conviction"]
                 _cx.log_live(_scores, _conv)        # telemetry: record what the core thought
@@ -208,7 +218,7 @@ def analyze(closes: list[float], panel: dict | None = None,
                       fundamental=fundamental_score, council=council_score,
                       ml=ml_score, prediction=prediction_score, tnet=tnet_score,
                       alpha_engine=alpha_engine_score, factors=factors_score,
-                      cortex=cortex_score, regime=regime, **gate_kwargs)
+                      cortex=cortex_score, rl=rl_score, regime=regime, **gate_kwargs)
     if symbol:                                  # capture the 'why' for the reasoning trace
         try:
             from . import reasoning
