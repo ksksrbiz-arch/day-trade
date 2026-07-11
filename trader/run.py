@@ -228,6 +228,24 @@ def _execute(intent: Intent, broker, optbroker, cfg, conf: float = 0.6, p_up: fl
     return oid, kind, intent.symbol, f"{kind} order"
 
 
+def _log_episode(exec_sym, side, price, regime=None):
+    """Record an executed trade into episodic memory so EVERY real position --
+    equity, crypto, scalper, beta floor -- feeds the belief-utility learning
+    loop, not just the news/daytrader path. Best-effort + self-contained."""
+    if not exec_sym or not price:
+        return
+    try:
+        from . import episodes as _ep, psyche as _psy, beliefs as _bel, market_brain as _mb
+        reg = regime or _mb.cached_regime("neutral")
+        _ps = _psy.state()
+        _ep.log(exec_sym, side, price, regime=reg,
+                mood=_ps.get("mood", ""), valence=_ps.get("valence", 0.0),
+                curiosity=_ps.get("curiosity", 0.0),
+                active_beliefs=[b["id"] for b in _bel.active(reg)][:6])
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _breaker_ok(cfg, broker) -> bool:
     """Returns False if the daily circuit breaker is active (halt trading)."""
     global _risk
@@ -319,15 +337,7 @@ def run_news(cfg, labeler, broker, md, groq, cs, optbroker, omni=None) -> int:
             _pup = None
         oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
         if oid:                                  # EPISODIC MEMORY: record the decision + its state
-            try:
-                from . import episodes as _ep, psyche as _psy, beliefs as _bel
-                _ps = _psy.state()
-                _ep.log(exec_sym, intent.side, broker.last_price(intent.symbol), regime=regime,
-                        mood=_ps.get("mood", ""), valence=_ps.get("valence", 0.0),
-                        curiosity=_ps.get("curiosity", 0.0),
-                        active_beliefs=[b["id"] for b in _bel.active(regime)][:6])
-            except Exception:  # noqa: BLE001
-                pass
+            _log_episode(exec_sym, intent.side, broker.last_price(intent.symbol), regime)
         open_syms.add(intent.symbol)
         _last_entry[intent.symbol] = time.time()
         acted += 1
@@ -378,6 +388,8 @@ def run_scalper(cfg, broker, md, optbroker) -> int:
         _pm = market_brain.cached_posture(_asset).get("size_mult", 1.0)
         intent.notional = round(intent.notional * max(0.3, min(2.0, _pm)), 2)
         oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg)
+        if oid:                                  # EPISODIC MEMORY: scalper trades count too
+            _log_episode(exec_sym, sig, broker.last_price(sym))
         open_syms.add(sym)
         _last_entry[sym] = time.time()
         acted += 1
@@ -475,15 +487,7 @@ def run_daytrader(cfg, labeler, broker, md, groq, optbroker, omni=None) -> int:
             _pup = None
         oid, instrument, exec_sym, note = _execute(intent, broker, optbroker, cfg, p_up=_pup)
         if oid:                                  # EPISODIC MEMORY: record the decision + its state
-            try:
-                from . import episodes as _ep, psyche as _psy, beliefs as _bel
-                _ps = _psy.state()
-                _ep.log(exec_sym, intent.side, broker.last_price(intent.symbol), regime=regime,
-                        mood=_ps.get("mood", ""), valence=_ps.get("valence", 0.0),
-                        curiosity=_ps.get("curiosity", 0.0),
-                        active_beliefs=[b["id"] for b in _bel.active(regime)][:6])
-            except Exception:  # noqa: BLE001
-                pass
+            _log_episode(exec_sym, intent.side, broker.last_price(intent.symbol), regime)
         open_syms.add(sym)
         _last_entry[sym] = time.time()
         acted += 1

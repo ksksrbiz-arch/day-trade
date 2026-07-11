@@ -65,6 +65,13 @@ def rebalance(cfg, broker) -> dict:
             oid = broker.buy_plain(sym, amt)
             if state is not None:
                 state.kv_set("beta_last", now)
+            if oid:                              # EPISODIC MEMORY: the beta floor is a real long
+                try:
+                    from . import run as _run
+                    px = broker.last_price(sym)
+                    _run._log_episode(sym, "buy", px)
+                except Exception:  # noqa: BLE001
+                    pass
             _publish(f"beta floor: +${amt:.0f} {sym} (core ${held:.0f}->target ${target:.0f}); "
                      f"tracks market when alpha is unproven")
             return {"action": "buy", "symbol": sym, "amount": amt,
