@@ -83,6 +83,10 @@ class StrategyConfig:
     use_omni: bool = False
     omni_gate: bool = False        # if True, veto when Omni clearly opposes; else log-only
     omni_borderline: float = 0.15  # enrich only when confidence within band above min_confidence
+    # --- TensorTrade RL trader (mode == "rl"; optional extra) ---
+    rl_universe: tuple = ()          # symbols the RL trader scans each cycle
+    rl_window: int = 20              # observation lookback (bars) for the DQN
+    rl_model_dir: str = ""           # where trained models live ("" -> data/rl)
     # --- confluence brain (technical + fundamental + quant + council) ---
     use_confluence: bool = False     # require multi-method agreement before trading
     confluence_min_agree: int = 2    # how many methods must agree on direction

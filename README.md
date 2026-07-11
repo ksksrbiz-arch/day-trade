@@ -53,6 +53,29 @@ Read this before you ever think about real money.
 4. **The news leg is slow on purpose-of-physics.** RSS polls in minutes; an LLM round-trip adds seconds. You are *not* racing the people who trade headlines in milliseconds off direct feeds. Treat signals as direction over hours/days, or the backtest will (correctly) punish you.
 5. **No real money until 1–4 pass.** And even then, size it as tuition, not a wealth machine. No strategy doubles money weekly and compounds — that math owns the market inside a year, which is why it doesn't exist.
 
+## RL trader (optional) — `MODE=rl`
+
+A full reinforcement-learning trader built on **TensorTrade** is available as an
+opt-in extra. A DQN agent makes the long/flat call per symbol; the resulting
+trade still passes through the same confirmation, policy, breaker, and sizing
+guardrails as every other entry. It's kept out of the lean core (it pulls in
+~1 GB of TensorFlow), lazy-imported, and gated by `trader.rl.available()`.
+
+```bash
+# install the extra (tensortrade's legacy setup.py needs --no-build-isolation)
+pip install "setuptools<66" wheel
+pip install --no-build-isolation -r requirements-rl.txt
+
+# train a model per symbol (honest scoreboard: agent vs buy-and-hold, with slippage)
+python -m trader.rl.cli train AAPL MSFT --episodes 12
+
+# run it live (paper): set MODE=rl and RL_UNIVERSE in .env, then
+python -m trader.run
+```
+
+Full details, design notes, and the honest-measurement protocol for the RL
+trader live in [`docs/RL.md`](docs/RL.md).
+
 ## Tuning
 
 All knobs live in `.env` (see `.env.example`) and `trader/config.py`: confidence/sentiment thresholds, notional per trade, take-profit / stop-loss percentages, shorting on/off, the trading universe, slippage, and the RSS feed list.
