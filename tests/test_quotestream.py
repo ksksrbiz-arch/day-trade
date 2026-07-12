@@ -54,3 +54,19 @@ def test_ensure_started_keyless_is_safe():
     h.ensure_started()
     # subscriber thread may run briefly; snapshot stays empty without keys/symbols
     assert isinstance(h.snapshot(), dict)
+
+
+def test_ensure_symbol_adds_and_dedupes():
+    h = QuoteHub()
+    h.ensure_symbol("aapl")
+    assert "AAPL" in h._symbols
+    n = len(h._symbols)
+    h.ensure_symbol("AAPL")          # idempotent
+    assert len(h._symbols) == n
+
+
+def test_ensure_symbol_ignores_crypto_and_blank():
+    h = QuoteHub()
+    h.ensure_symbol("BTC/USD")       # crypto pairs handled elsewhere
+    h.ensure_symbol("")
+    assert h._symbols == []

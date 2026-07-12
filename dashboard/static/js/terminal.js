@@ -59,26 +59,41 @@
           if (!ev.data) return;
           let q;
           try { q = JSON.parse(ev.data); } catch (e) { return; }
-          if (!q || !q.symbol) return;
-          const sym = q.symbol.toUpperCase();
-          store.set(sym, Object.assign(store.get(sym) || {}, q));
-          (subs.get(sym) || []).forEach((cb) => {
-            try { cb(store.get(sym)); } catch (e) {}
-          });
-          bus.emit("quote", store.get(sym));
+          ingest(q);
         };
         es.onerror = () => { /* EventSource auto-reconnects (retry: hint) */ };
       } catch (e) { es = null; }
     }
 
+    // Merge one quote into the store and notify subscribers. Public so any
+    // source (the SSE feed, a future crypto stream, a REST poller) can feed it.
+    function ingest(q) {
+      if (!q || !q.symbol) return;
+      const sym = String(q.symbol).toUpperCase();
+      store.set(sym, Object.assign(store.get(sym) || {}, q));
+      (subs.get(sym) || []).forEach((cb) => {
+        try { cb(store.get(sym)); } catch (e) {}
+      });
+      bus.emit("quote", store.get(sym));
+    }
+
     return {
       get(sym) { return store.get((sym || "").toUpperCase()) || null; },
       all() { return Object.fromEntries(store); },
+      ingest,
       subscribe(sym, cb) {
         connect();
         sym = (sym || "").toUpperCase();
         if (!subs.has(sym)) subs.set(sym, new Set());
         subs.get(sym).add(cb);
+        // Ask the backend to subscribe the live stream to this symbol and seed
+        // an initial snapshot (fire-and-forget).
+        try {
+          fetch("/api/quotes?symbols=" + encodeURIComponent(sym))
+            .then((r) => r.ok ? r.json() : null)
+            .then((d) => { if (d && d.quotes && d.quotes[sym]) ingest(d.quotes[sym]); })
+            .catch(() => {});
+        } catch (e) {}
         const cur = store.get(sym);
         if (cur) { try { cb(cur); } catch (e) {} }
         return () => subs.get(sym) && subs.get(sym).delete(cb);
@@ -146,6 +161,11 @@
       ".lp-body{padding:12px;overflow:auto;min-height:36px}" +
       ".lp-tile.drop-before{box-shadow:-3px 0 0 0 var(--cyan,#3cf0e4)}" +
       ".lp-tile.drop-after{box-shadow:3px 0 0 0 var(--cyan,#3cf0e4)}" +
+      ".lp-quote{font-size:11px;color:#8a94a6;margin:0 4px;white-space:nowrap;font-variant-numeric:tabular-nums}" +
+      ".lp-quote b{color:#e6ebf2;font-weight:700}" +
+      '.lp-quote[data-dir="up"] b{color:#3ddc84}' +
+      '.lp-quote[data-dir="down"] b{color:#ef4444}' +
+      ".lpq-dim{opacity:.5}" +
       "@media(max-width:900px){.lp-tile{grid-column:span 12 !important}}";
     document.head.appendChild(s);
   }
@@ -362,6 +382,51 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   }
 
+  // ---- live-quote chip in a panel's Launchpad header ----------------------
+  // A symbol-bound panel calls T.setPanelSymbol(panelId, sym) whenever it loads
+  // a ticker; the tile header then shows that symbol's live price (from the SSE
+  // quote store), colored by tick direction. No-op for non-terminal panels.
+  const panelQuoteSubs = new Map(); // panelId -> {unsub, last}
+
+  function setPanelSymbol(panelId, sym) {
+    sym = (sym || "").toUpperCase();
+    const tile = document.getElementById(panelId);
+    if (!tile) return;
+    const head = tile.querySelector(".lp-head");
+    if (!head) return;
+    let chip = head.querySelector(".lp-quote");
+    if (!chip) {
+      chip = document.createElement("span");
+      chip.className = "lp-quote";
+      const name = head.querySelector(".lp-name");
+      if (name) head.insertBefore(chip, name.nextSibling);
+      else head.appendChild(chip);
+    }
+    const prev = panelQuoteSubs.get(panelId);
+    if (prev && prev.unsub) { try { prev.unsub(); } catch (e) {} }
+    const state = { unsub: null, last: null };
+    panelQuoteSubs.set(panelId, state);
+    chip.dataset.dir = "";
+    if (!sym) { chip.textContent = ""; return; }
+    chip.innerHTML = esc(sym) + ' <span class="lpq-dim">· —</span>';
+
+    const render = (q) => {
+      const px = q && (q.last != null ? q.last
+        : (q.bid && q.ask ? (Number(q.bid) + Number(q.ask)) / 2 : null));
+      if (px == null || isNaN(px)) return;
+      let dir = chip.dataset.dir || "flat";
+      if (state.last != null) {
+        if (px > state.last) dir = "up";
+        else if (px < state.last) dir = "down";
+      }
+      state.last = px;
+      chip.dataset.dir = dir;
+      chip.innerHTML = esc(sym) + " <b>" + Number(px).toFixed(2) + "</b>" +
+        (dir === "up" ? " ▲" : dir === "down" ? " ▼" : "");
+    };
+    state.unsub = quotes.subscribe(sym, render);
+  }
+
   // ---- command registry (feeds the cmdk palette) --------------------------
   const commands = [];            // {code, run(sym), desc}
 
@@ -402,7 +467,7 @@
 
   // ---- expose -------------------------------------------------------------
   window.T = {
-    J, bus, quotes, registerPanel, registerCommand, openSecurity,
+    J, bus, quotes, registerPanel, registerCommand, openSecurity, setPanelSymbol,
     get panels() { return panels.slice(); },
     get commands() { return commands.slice(); },
   };

@@ -23,6 +23,10 @@ def quotes_snapshot(symbols: str = Query("", description="comma-separated ticker
     """Latest cached quote for each requested symbol (all if none given)."""
     hub.ensure_started()
     syms = [s.strip().upper() for s in symbols.split(",") if s.strip()] or None
+    # Requesting a symbol also subscribes the live stream to it, so the SSE feed
+    # starts pushing its quotes (used by panel header live-quote chips).
+    for s in (syms or []):
+        hub.ensure_symbol(s)
     return {"quotes": hub.snapshot(syms), "version": hub.version}
 
 

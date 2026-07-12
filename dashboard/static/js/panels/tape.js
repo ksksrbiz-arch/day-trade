@@ -70,6 +70,7 @@
   async function load(el) {
     var host = el.querySelector(".tas-prints");
     if (host) host.innerHTML = '<div class="muted">loading…</div>';
+    if (T.setPanelSymbol) T.setPanelSymbol("tape-panel", SYM);
     var d = await T.J("/api/tape/" + encodeURIComponent(SYM));
     var head = el.querySelector(".tas-head");
     if (head) head.textContent = SYM;
