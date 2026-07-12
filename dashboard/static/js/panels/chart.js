@@ -111,6 +111,7 @@
 
   async function load() {
     if (statusEl) statusEl.textContent = "Loading " + SYM + "…";
+    if (T.setPanelSymbol) T.setPanelSymbol("chart-panel", SYM);
     const d = await T.J("/api/chart/" + encodeURIComponent(SYM) + "?days=120");
     if (!d) { if (statusEl) statusEl.textContent = SYM + " — request failed"; return; }
     SYM = (d.symbol || SYM);

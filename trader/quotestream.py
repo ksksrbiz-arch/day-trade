@@ -78,6 +78,9 @@ class QuoteHub:
         self._started = False
         self._thread: Optional[threading.Thread] = None
         self._symbols: list[str] = []
+        self._stream = None            # live StockDataStream, once running
+        self._on_quote = None          # handler refs, for on-demand subscribe
+        self._on_trade = None
 
     # ---- reads -------------------------------------------------------------
     def snapshot(self, symbols: Optional[Iterable[str]] = None) -> dict[str, dict]:
@@ -131,6 +134,31 @@ class QuoteHub:
         self._thread = threading.Thread(target=self._run, name="quotehub", daemon=True)
         self._thread.start()
 
+    def ensure_symbol(self, symbol: str) -> None:
+        """Subscribe to `symbol` on demand (e.g. a symbol the UI just opened).
+
+        Adds it to the tracked set and, if the live stream is already running,
+        best-effort subscribes immediately. Crypto pairs (``BTC/USD``) and
+        blanks are ignored. Never raises — a failed live subscribe just means
+        the symbol gets picked up on the next reconnect.
+        """
+        symbol = (symbol or "").upper()
+        if not symbol or "/" in symbol:
+            return
+        with self._lock:
+            if symbol in self._symbols:
+                return
+            self._symbols.append(symbol)
+            stream = self._stream
+            on_q, on_t = self._on_quote, self._on_trade
+        if stream is not None and on_q is not None:
+            try:
+                stream.subscribe_quotes(on_q, symbol)
+                stream.subscribe_trades(on_t, symbol)
+                print(f"[quotestream] on-demand subscribe {symbol}")
+            except Exception as e:  # noqa: BLE001
+                print(f"[quotestream] on-demand subscribe failed {symbol}: {e}")
+
     def _run(self) -> None:
         try:
             from trader import config
@@ -140,9 +168,6 @@ class QuoteHub:
         if not (cfg.alpaca_key and cfg.alpaca_secret):
             # keyless: nothing to subscribe to; hub stays empty (keepalives only)
             print("[quotestream] no Alpaca keys — quote hub idle")
-            return
-        if not self._symbols:
-            print("[quotestream] no seed symbols — quote hub idle")
             return
         try:
             from alpaca.data.live import StockDataStream
@@ -171,16 +196,24 @@ class QuoteHub:
             except Exception:  # noqa: BLE001
                 pass
 
+        self._on_quote, self._on_trade = _on_quote, _on_trade
+
         while True:
             try:
                 stream = StockDataStream(cfg.alpaca_key, cfg.alpaca_secret,
                                          feed=DataFeed.IEX)
-                stream.subscribe_quotes(_on_quote, *self._symbols)
-                stream.subscribe_trades(_on_trade, *self._symbols)
-                print(f"[quotestream] subscribing {len(self._symbols)} symbols")
+                with self._lock:
+                    syms = list(self._symbols)
+                    self._stream = stream
+                if syms:
+                    stream.subscribe_quotes(_on_quote, *syms)
+                    stream.subscribe_trades(_on_trade, *syms)
+                print(f"[quotestream] subscribing {len(syms)} symbols")
                 stream.run()  # blocks; reconnect on failure
             except Exception as e:  # noqa: BLE001
                 print(f"[quotestream] stream error, retrying in 10s: {e}")
+                with self._lock:
+                    self._stream = None
                 time.sleep(10)
 
 
