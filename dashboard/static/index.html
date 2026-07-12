@@ -1560,7 +1560,7 @@ async function loadDayTrader(){ await Promise.all([dtForecast(),dtRegime(),dtCon
 
 async function refresh(){
   await loadAccount();
-  await Promise.all([loadKpis(),loadWatch(),loadBrain(),loadBots(),loadEquity(),loadPrice(),loadDecisions(),loadNews(),loadTape(),loadML(),loadAgents(),loadHealth(),loadTraces(),loadApprovals(),loadWSB(),loadNewsBar(),loadSigScore(),loadPredictions(),loadMesh(),loadHealthFull(),loadDayTrader(),loadPerformance(),loadNews(),loadTimeline(),loadAlerts(),loadNeural()]);
+  await Promise.all([loadKpis(),loadWatch(),loadBrain(),loadBots(),loadEquity(),loadPrice(),loadDecisions(),loadNews(),loadTape(),loadML(),loadAgents(),loadHealth(),loadTraces(),loadApprovals(),loadWSB(),loadNewsBar(),loadSigScore(),loadPredictions(),loadMesh(),loadHealthFull(),loadDayTrader(),loadPerformance(),loadTimeline(),loadAlerts(),loadNeural()]);
   loadConfluence();
   $('#updated').textContent='updated '+new Date().toLocaleTimeString();
 }
@@ -1568,7 +1568,12 @@ refresh();
 setupTabs();
 renderChat(false);
 document.getElementById('chatq').addEventListener('keydown',e=>{if(e.key==='Enter')councilSend();});
-setInterval(refresh,20000);
+/* Poll only while the tab is actually visible. A backgrounded/left-open tab
+   otherwise refreshes ~30 endpoints every 20s indefinitely -- the dominant
+   source of Render outbound bandwidth. When hidden we skip the cycle; when the
+   tab becomes visible again we refresh immediately so nothing looks stale. */
+setInterval(()=>{ if(!document.hidden) refresh(); }, 20000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) refresh(); });
 window.addEventListener('resize',()=>{loadPrice();});
 
 /* ===================== UX: toasts + command palette ===================== */
