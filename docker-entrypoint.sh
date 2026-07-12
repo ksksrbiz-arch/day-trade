@@ -27,9 +27,12 @@ if [ "${RUN_DAEMONS:-1}" = "1" ]; then
   # ML: train an initial model now (fast, Alpaca-backed) + keep it improving
   python -m trader.ml.train >> data/ml_train.log 2>&1 &
   python -m trader.ml.daemon --every 6 >> data/ml.log 2>&1 &
-  # TensorTrade RL retrain daemon (opt-in, needs requirements-rl.txt + heavy TF).
-  # Champion/challenger gated: the live model only improves. OFF by default.
-  if [ "${RUN_RL_DAEMON:-0}" = "1" ]; then
+  # TensorTrade RL retrain daemon (needs requirements-rl.txt + heavy TF; installed
+  # by default in the image). Champion/challenger gated: the live model only
+  # improves. ON by default -- set RUN_RL_DAEMON=0 to disable. The first sweep
+  # trains models for the RL universe so the confluence RL voice has something to
+  # say; it self-skips cleanly if TensorTrade isn't present.
+  if [ "${RUN_RL_DAEMON:-1}" = "1" ]; then
     python -m trader.rl.daemon --every "${RL_RETRAIN_EVERY_H:-12}" --episodes "${RL_RETRAIN_EPISODES:-12}" >> data/rl.log 2>&1 &
   fi
   # heartbeat: publish real cached state to the mesh every ~30s so the /brain

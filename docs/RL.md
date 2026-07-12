@@ -7,9 +7,19 @@ produces still flows through the platform's existing execution guardrails
 (confirmation, policy, safety lock, circuit breaker, sizing). The RL brain
 replaces the *decision*, not the risk plumbing.
 
-This is an **optional extra** — it is not part of the lean core and pulls in
-~1 GB of TensorFlow/Keras/gym/pandas. The core app boots and deploys fine
-without it; `trader.rl.available()` gates every RL path.
+**On by default in the deployed image.** The Dockerfile bakes in the RL extra
+(`INSTALL_RL=1`, ~1 GB of TensorFlow/Keras/gym/pandas), the RL DQN votes in the
+confluence brain (`USE_RL_VOICE` + `USE_CONFLUENCE` default true), and the
+champion/challenger retrain daemon runs (`RUN_RL_DAEMON=1`). To disable, set those
+env vars to `0`/`false` (or build with `--build-arg INSTALL_RL=0`).
+
+It remains a **lazily-loaded** extra: `trader.rl.available()` gates every RL path,
+so a local checkout without the heavy install still boots and runs — the RL voice
+and daemon simply self-skip. Only the standalone `MODE=rl` brain is opt-in.
+
+> **Resource note:** TensorFlow import + periodic training is memory-hungry. On a
+> small host (e.g. Render starter) the daemon can pressure RAM; bump the plan or
+> set `RUN_RL_DAEMON=0` if you see OOMs. Model files themselves are tiny (KBs).
 
 ## Why the install is unusual
 
