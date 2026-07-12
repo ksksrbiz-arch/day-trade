@@ -26,6 +26,11 @@ PROJ = Path(__file__).resolve().parent.parent
 STATIC = Path(__file__).resolve().parent / "static"
 
 app = FastAPI(title="paper-trader control center")
+# Gzip all responses >=500 bytes. The JSON API (bars, mesh graph, telemetry,
+# etc.) is highly compressible -- typically 80-90% smaller on the wire -- which
+# is the single biggest lever on Render outbound bandwidth. No feature impact.
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"])
