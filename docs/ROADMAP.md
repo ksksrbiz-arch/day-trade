@@ -7,6 +7,32 @@ behaviour-preserving** — layered feature-by-feature, never a big-bang rewrite.
 
 ---
 
+## Status
+
+The **first sprint and then some is shipped** — a live-quote SSE spine, a
+keyboard command palette (`AAPL GP <GO>` function codes), a savable tiled
+**Launchpad**, live-quote chips in panel headers, and eight brain-wired panels
+under the **Terminal** tab:
+
+| Phase | Feature | Status |
+|---|---|---|
+| 0 | Streaming spine (`/api/quotes/stream` SSE + on-demand subscribe) | ✅ shipped |
+| 1 | Command line + **Launchpad** (tiled/resizable/savable) | ✅ shipped |
+| 2 | Security Master (DES/FA + House View) | ✅ shipped |
+| 3 | Advanced Chart (GP) | ✅ shipped |
+| 4 | Options (OMON) | ✅ shipped |
+| 5 | Screener (EQS) + **Market Monitor (MOST)** | ✅ shipped |
+| 6 | Calendar (ECO) | ✅ shipped |
+| 7 | Tape & Depth (TAS) | ✅ shipped |
+| 8 | Portfolio (PORT) | ✅ shipped |
+| 9 | Cross-asset (FX / rates / commodities) | ⬜ deferred (data-gated) |
+
+Remaining: Phase 9 (cross-asset, blocked on data sources) and continued live-data
+validation on Render during market hours. The phase detail below is retained as
+the design record.
+
+---
+
 ## 1. The honest framing
 
 Bloomberg is three things bundled: (a) **licensed real-time cross-asset data**,
