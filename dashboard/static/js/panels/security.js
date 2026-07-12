@@ -62,6 +62,7 @@
 
   async function load(el) {
     el.innerHTML = '<div class="muted">loading ' + esc(SYM) + "…</div>";
+    if (window.T.setPanelSymbol) window.T.setPanelSymbol("security-panel", SYM);
     var d = await window.T.J("/api/security/" + encodeURIComponent(SYM));
     if (!d) {
       el.innerHTML =

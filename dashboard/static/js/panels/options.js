@@ -116,6 +116,7 @@
 
   async function load(el) {
     el.innerHTML = '<div class="muted">loading option chain…</div>';
+    if (T.setPanelSymbol) T.setPanelSymbol("options-panel", SYM);
     let data = null;
     try {
       data = await T.J("/api/options/" + encodeURIComponent(SYM));
