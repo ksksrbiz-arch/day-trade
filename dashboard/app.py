@@ -1395,4 +1395,78 @@ def api_loop_health():
     return out
 
 
+@app.get("/api/research/run")
+def api_research_run():
+    """Kick a deep research sweep (bounded grid + purged-CV; adopts best only if
+    significant). Returns immediately -- poll /api/research/status. Safe: training
+    store + champion-gated only, never trades. Intended for a scheduler (Cloudflare
+    Cron) or the autonomous market-closed action."""
+    try:
+        from trader import research
+        return research.run_async()
+    except Exception as e:  # noqa: BLE001
+        return {"started": False, "error": str(e)[:200]}
+
+
+@app.get("/api/research/status")
+def api_research_status():
+    try:
+        from trader import research
+        return research.status()
+    except Exception as e:  # noqa: BLE001
+        return {"error": str(e)[:160]}
+
+
+@app.get("/api/digest")
+def api_digest():
+    """Assemble the daily review (health + account + autonomy + strategist brief +
+    research) as markdown + structured data, so a scheduler can fetch and forward
+    it (email / Slack / Discord)."""
+    data = {}
+    md = ["# Paper-trading digest \u2014 " + __import__("time").strftime("%Y-%m-%d %H:%M UTC")]
+    try:
+        from dashboard import dash_metrics
+        sm = dash_metrics.summary()
+        data["trading"] = sm
+        md.append(f"**Trading:** {sm.get('orders',0)} orders / {sm.get('total_decisions',0)} decisions")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from trader import episodes, beliefs
+        ep = episodes.stats(); bs = beliefs.all_beliefs()
+        data["episodes"] = ep
+        wu = sum(1 for b in bs if abs(b.get("utility", 0.0)) > 1e-9)
+        md.append(f"**Learning:** {ep.get('total',0)} episodes ({ep.get('resolved',0)} resolved), "
+                  f"{len(bs)} beliefs ({wu} with utility)")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from trader.ml.infer import model_card
+        mc = model_card()
+        md.append(f"**ML edge:** AUC {mc.get('auc')} (lo {mc.get('auc_lo')}), {len(mc.get('importances',{}))} feats")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from trader import research
+        r = research.last()
+        if r.get("verdict"):
+            md.append(f"**Research:** {r['verdict']}")
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from trader import cognition
+        b = (cognition.last("brief") or {}).get("brief")
+        if b:
+            md.append("\n**Brief:** " + b)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from trader import safety
+        if safety.lock_active():
+            md.append("\n\u26a0\ufe0f **SAFETY LOCK ACTIVE:** " + safety.lock_reason())
+    except Exception:  # noqa: BLE001
+        pass
+    return {"markdown": "\n\n".join(md), "data": data}
+
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")

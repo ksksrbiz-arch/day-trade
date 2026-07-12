@@ -928,7 +928,41 @@ def _ap_relax_starved(p):
     return res
 
 
+def _ev_deep_research():
+    """Heavier nightly ML search: evaluate a grid of configs with purged-CV and
+    adopt the best only if statistically significant. Market-closed only (it is
+    compute-heavy) and gated to ~once a day. Auto-safe: training store + champion
+    gated, never trades."""
+    try:
+        from . import marketclock
+    except Exception as e:  # noqa: BLE001
+        return {"eligible": False, "reason": f"marketclock unavailable: {str(e)[:50]}"}
+    if marketclock.is_open():
+        return {"eligible": False, "reason": "market open -- deep research waits for close"}
+    last = _age_h(os.path.join(_DATA, "deep_research_last"))
+    if last is not None and last < 20:
+        return {"eligible": False, "reason": f"researched recently ({last:.1f}h < 20h)"}
+    return {"eligible": True, "reason": "nightly deep research sweep (grid + purged-CV)",
+            "proposal": {"kind": "deep_research"}}
+
+
+def _ap_deep_research(p):
+    from . import research
+    import time as _t
+    res = research.deep_sweep()
+    try:
+        os.makedirs(_DATA, exist_ok=True)
+        open(os.path.join(_DATA, "deep_research_last"), "w").write(
+            _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()))
+    except Exception:  # noqa: BLE001
+        pass
+    return {"verdict": res.get("verdict"), "adopted": res.get("adopted"),
+            "elapsed_s": res.get("elapsed_s")}
+
+
 ACTIONS = {
+    "deep_research":        {"evaluate": _ev_deep_research, "apply": _ap_deep_research,
+                             "auto_safe": True, "desc": "nightly grid+purged-CV ML search; adopts best only if significant (market-closed)"},
     "relax_when_starved":   {"evaluate": _ev_relax_when_starved, "apply": _ap_relax_starved,
                              "auto_safe": True, "desc": "lower the confidence floor when the desk decides a lot but never trades (un-starve the learning loop)"},
     "llm_macro":            {"evaluate": _ev_llm_macro, "apply": _ap_llm_macro,
