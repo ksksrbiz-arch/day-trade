@@ -4,11 +4,10 @@ compatibility_date = "2024-11-01"
 
 # --- scheduled triggers (all times UTC) ---
 [triggers]
-crons = [
-  "*/10 * * * *",   # keep-warm: ping the dyno every 10 min so it never idles out
-  "30 1 * * *",     # nightly deep ML research sweep (after the US close)
-  "0 13 * * 1-5",   # daily digest -> webhook, weekdays pre-market
-]
+# ONE cron slot (account free-plan limit is 5 total). The Worker keeps the dyno
+# warm every tick and time-gates the nightly research (~01:00 UTC) and the daily
+# digest (13:00 UTC weekdays) internally -- see worker.js scheduled().
+crons = ["*/10 * * * *"]
 
 # --- config ---
 [vars]

@@ -4,13 +4,20 @@ A tiny Cloudflare Worker that uses **free Cron Triggers** to keep the Render
 backend warm, run the nightly ML research sweep, and push a daily digest.
 
 ## What it does
-| Cron (UTC) | Task | Effect |
+Uses a **single** cron trigger (`*/10 * * * *`) — the account free-plan limit is
+5 cron triggers total — and time-gates the heavier jobs inside the Worker:
+
+| When (UTC) | Task | Effect |
 |---|---|---|
-| `*/10 * * * *` | keep-warm | `GET /health` + topology so the free Render dyno never idles out (which kills the daemons) |
-| `30 1 * * *` | research | `GET /api/research/run` — triggers the deep ML sweep on Render after the US close |
-| `0 13 * * 1-5` | digest | `GET /api/review` → forwards the summary to your Slack/Discord webhook |
+| every 10 min | keep-warm | `GET /health` + topology so the free Render dyno never idles out (which kills the daemons) |
+| ~01:00 daily | research | `GET /api/research/run` — triggers the deep ML sweep on Render after the US close |
+| 13:00 weekdays | digest | `GET /api/review` → forwards the summary to your Slack/Discord webhook |
 
 Heavy compute stays on Render; Cloudflare only schedules and forwards.
+
+**Live:** deployed at `https://day-trade-scheduler.skdev-371.workers.dev`
+(schedule `*/10 * * * *`). Add the digest webhook with
+`wrangler secret put DIGEST_WEBHOOK_URL` then `wrangler deploy` to enable push.
 
 ## Deploy (one time)
 ```bash
