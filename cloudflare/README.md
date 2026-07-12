@@ -8,7 +8,7 @@ backend warm, run the nightly ML research sweep, and push a daily digest.
 |---|---|---|
 | `*/10 * * * *` | keep-warm | `GET /health` + topology so the free Render dyno never idles out (which kills the daemons) |
 | `30 1 * * *` | research | `GET /api/research/run` — triggers the deep ML sweep on Render after the US close |
-| `0 13 * * 1-5` | digest | `GET /api/digest` → forwards the summary to your Slack/Discord webhook |
+| `0 13 * * 1-5` | digest | `GET /api/review` → forwards the summary to your Slack/Discord webhook |
 
 Heavy compute stays on Render; Cloudflare only schedules and forwards.
 
@@ -34,4 +34,4 @@ https://day-trade-scheduler.<your-subdomain>.workers.dev/?task=keepwarm
 - No secrets are required except the optional webhook. `BACKEND_URL` is in
   `wrangler.toml`; change it if the backend URL changes.
 - The keep-warm ping is what defeats Render free-tier spin-down (idle after ~15
-  min). If you move Render to a paid always-on plan you can drop that cron.
+  min). If you move Render to a paid alw

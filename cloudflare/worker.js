@@ -33,7 +33,7 @@ async function research(base) {
 }
 
 async function digest(base, env) {
-  const r = await fetch(base + "/api/digest").catch(() => null);
+  const r = await fetch(base + "/api/review").catch(() => null);
   if (!r || !r.ok) return { task: "digest", ok: false };
   const d = await r.json().catch(() => ({}));
   const md = d.markdown || "(no digest)";
@@ -71,8 +71,4 @@ export default {
     const base = (env && env.BACKEND_URL) || DEFAULT_BACKEND;
     const task = new URL(req.url).searchParams.get("task") || "keepwarm";
     const out = await handle(task, base, env);
-    return new Response(JSON.stringify(out, null, 2), {
-      headers: { "content-type": "application/json" },
-    });
-  },
-};
+    return new Response(JSON.stringify(out, null, 2), 
