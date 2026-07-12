@@ -16,6 +16,17 @@ services:
         value: "utf-8"
       - key: USE_PIECES
         value: "false"          # no local Pieces LTM in the cloud
+      # --- TensorTrade RL: ON by default (image bakes in the RL extra). ---
+      # The RL DQN votes in the confluence brain and a champion/challenger
+      # daemon retrains models on a cadence. Set any to "0"/"false" to disable.
+      # NOTE: TensorFlow + periodic training is memory-hungry; if the starter
+      # plan OOMs, bump the plan or set RUN_RL_DAEMON=0.
+      - key: USE_CONFLUENCE
+        value: "true"
+      - key: USE_RL_VOICE
+        value: "true"
+      - key: RUN_RL_DAEMON
+        value: "1"
       # --- add these in the Render dashboard (do NOT commit secrets) ---
       # ALPACA_KEY, ALPACA_SECRET, GROQ_KEY, CF_ACCOUNT_ID, CF_API_TOKEN, ...
     disk:

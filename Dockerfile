@@ -14,10 +14,10 @@ ENV PYTHONUNBUFFERED=1 \
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Optional TensorTrade RL trader (mode == "rl"). OFF by default so the base image
-# stays lean; enable with `docker build --build-arg INSTALL_RL=1 ...`.
+# TensorTrade RL trader. ON by default (the RL voice + retrain daemon ship
+# enabled); disable the ~1 GB TensorFlow install with `--build-arg INSTALL_RL=0`.
 # tensortrade's legacy setup.py needs --no-build-isolation (see requirements-rl.txt).
-ARG INSTALL_RL=0
+ARG INSTALL_RL=1
 COPY requirements-rl.txt ./
 RUN if [ "$INSTALL_RL" = "1" ]; then \
         pip install "setuptools<66" wheel && \
