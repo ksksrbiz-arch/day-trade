@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>1Commerce Trading Terminal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script defer src="/static/js/terminal.js"></script>
 <style>
   /* ============================================================
      1COMMERCE TERMINAL — visual system v2 (neural command-center)
@@ -1601,6 +1602,7 @@ function cmdkRender(q){
   q=(q||'').trim().toLowerCase();
   const sym=q.toUpperCase().replace(/[^A-Z0-9.\/]/g,'');
   let items=cmdkCommands();
+  try{ if(window.terminalCommands) items=items.concat(window.terminalCommands(q.toUpperCase())); }catch(e){}
   if(q) items=items.filter(c=>c.label.toLowerCase().includes(q)||c.cat.toLowerCase().includes(q));
   if(sym.length>=1 && sym.length<=6 && /^[A-Z]/.test(sym)){
     items.unshift({cat:'Symbol',label:'Set Day-Trader symbol → '+sym,run:()=>{DTSYM=sym;PXSYM=sym;showTab('daytrader');try{dtForecast();}catch(e){}try{loadPrice();}catch(e){}toast('Symbol set to '+sym,'ok','Day Trader');}});

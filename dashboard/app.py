@@ -1474,4 +1474,25 @@ def api_review():
     return {"markdown": "\n\n".join(md), "data": data}
 
 
+@app.get("/api/panels")
+def list_panels():
+    """Terminal panel modules to auto-load (files in static/js/panels/*.js).
+
+    The client substrate (static/js/terminal.js) fetches this and injects each
+    module, which self-registers via ``T.registerPanel`` — so a new panel is a
+    new file here plus a new router in dashboard/api/, with no edits to shared
+    frontend code.
+    """
+    panels_dir = STATIC / "js" / "panels"
+    try:
+        files = sorted(p.name for p in panels_dir.glob("*.js"))
+    except Exception:  # noqa: BLE001
+        files = []
+    return {"panels": [f"/static/js/panels/{f}" for f in files]}
+
+
+# Auto-mount every router under dashboard/api/ (quotes + terminal panels).
+from dashboard.api._autoload import include_all as _include_all_routers
+_MOUNTED_ROUTERS = _include_all_routers(app)
+
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
