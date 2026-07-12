@@ -4,6 +4,8 @@ The pure-NumPy feature tests always run (no heavy deps). The env/agent tests are
 skipped automatically when the optional RL extra isn't installed, so the lean
 core CI stays green without TensorFlow.
 """
+import os
+
 import numpy as np
 import pytest
 
@@ -90,6 +92,63 @@ def test_score_from_closes_none_without_model(tmp_path):
     closes = list(100 + np.cumsum(np.random.RandomState(6).normal(0, 1, 60)))
     # empty model dir -> no model -> voice absent (None), never raises
     assert score_from_closes("NOPE", closes, window=10, model_dir=str(tmp_path)) is None
+
+
+# ---- retrain daemon (pure paths; no TF needed) --------------------------- #
+
+class _Strat:
+    def __init__(self, rl_universe=(), universe=frozenset()):
+        self.rl_universe = rl_universe
+        self.universe = universe
+
+
+class _Cfg:
+    def __init__(self, strat):
+        self.strategy = strat
+
+
+def test_daemon_eval_universe_prefers_rl_universe():
+    from trader.rl.daemon import _eval_universe
+    uni = _eval_universe(_Cfg(_Strat(rl_universe=("NVDA", "AMD"))))
+    assert uni[:2] == ["NVDA", "AMD"]     # configured RL symbols come first
+    assert len(uni) <= 16 and len(set(uni)) == len(uni)  # deduped + capped
+
+
+def test_daemon_eval_universe_falls_back_to_core():
+    from trader.rl.daemon import _eval_universe
+    uni = _eval_universe(_Cfg(_Strat()))
+    assert "SPY" in uni and "AAPL" in uni  # liquid basket when nothing configured
+
+
+def test_daemon_skips_thin_history(tmp_path):
+    """retrain_symbol returns a skip (no training) when history is too short --
+    reachable without TensorFlow because the length guard runs first."""
+    from trader.rl.daemon import retrain_symbol
+    res = retrain_symbol("THIN", list(range(30)), str(tmp_path), window=10,
+                         slippage_bps=10.0, episodes=1, holdout=40)
+    assert "skipped" in res and res["symbol"] == "THIN"
+
+
+# ---- retrain daemon (needs the RL extra) --------------------------------- #
+
+@rl_only
+def test_daemon_champion_challenger_gate(tmp_path):
+    from trader.rl.daemon import retrain_symbol
+    from trader.rl.trader import model_path
+    rng = np.random.RandomState(11)
+    closes = (100 + np.cumsum(rng.normal(0.05, 1, 260))).tolist()
+    # first sweep: no champion -> trains and promotes
+    r1 = retrain_symbol("DMN", closes, str(tmp_path), window=10,
+                        slippage_bps=10.0, episodes=2, holdout=40)
+    assert r1["promoted"] is True and r1["champion"] is None
+    assert os.path.exists(model_path("DMN", str(tmp_path)) + ".keras")
+    assert r1["n_eval"] == 50 and r1["n_train"] == len(closes) - 40  # held-out tail
+    # second sweep: a champion now exists -> gate compares out-of-sample, and a
+    # non-strictly-better challenger must NOT be promoted
+    r2 = retrain_symbol("DMN", closes, str(tmp_path), window=10,
+                        slippage_bps=10.0, episodes=2, holdout=40)
+    assert r2["champion"] is not None
+    assert r2["promoted"] == (r2["challenger"] > r2["champion"])
 
 
 # ---- env / agent tests (need the RL extra) ------------------------------- #

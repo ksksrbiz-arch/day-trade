@@ -113,6 +113,37 @@ Model status is exposed at **`GET /api/rl`** on the dashboard backend (extra
 availability, config, and per-symbol trained models — read from metadata without
 loading TensorFlow).
 
+## Keeping models fresh — the retrain daemon
+
+Like the NumPy ML model (`trader.ml.daemon`), the RL models can retrain on a
+cadence with a **champion/challenger gate** so the live model only ever improves:
+
+```bash
+python -m trader.rl.daemon --every 12 --episodes 12
+```
+
+Each cycle, per symbol in the RL universe:
+
+1. Recent history is split into a training slice and a **held-out tail**.
+2. The incumbent (champion) is backtested on the held-out tail.
+3. A challenger is trained on the training slice **only**, then backtested on the
+   *same* held-out tail.
+4. The challenger is promoted **only if it beats the champion out-of-sample**
+   (or there's no champion yet). Otherwise the incumbent is left untouched.
+
+The held-out evaluation is the honesty layer — a challenger can't win by
+memorising the bars it's scored on. Promotion is an atomic file swap; a failed or
+worse challenger never touches the live model.
+
+Enable it in the container with `RUN_RL_DAEMON=1` (off by default, since it needs
+the heavy RL extra):
+
+```bash
+RUN_RL_DAEMON=1
+RL_RETRAIN_EVERY_H=12
+RL_RETRAIN_EPISODES=12
+```
+
 ## How it works
 
 ```
