@@ -25,11 +25,14 @@ under the **Terminal** tab:
 | 6 | Calendar (ECO) | ✅ shipped |
 | 7 | Tape & Depth (TAS) | ✅ shipped |
 | 8 | Portfolio (PORT) | ✅ shipped |
-| 9 | Cross-asset (FX / rates / commodities) | ⬜ deferred (data-gated) |
+| 9 | **Cross-Asset (XA)** — crypto + FX + rates + commodities | ✅ shipped |
 
-Remaining: Phase 9 (cross-asset, blocked on data sources) and continued live-data
-validation on Render during market hours. The phase detail below is retained as
-the design record.
+Every roadmap phase is now shipped. Cross-asset uses free/cheap feeds: crypto
+from CoinGecko (keyless, live), FX/rates/commodities from Alpha Vantage (cached
+6h — the free tier is ~25 calls/day, so blocks populate progressively and
+degrade gracefully). Remaining work is operational: live-data validation on
+Render during market hours, and richer sources if the AV free tier proves too
+tight. The phase detail below is retained as the design record.
 
 ---
 
